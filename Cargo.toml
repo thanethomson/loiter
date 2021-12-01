@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "loiter",
+    "loiter-cli",
+]
