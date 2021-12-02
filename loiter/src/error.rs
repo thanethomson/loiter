@@ -4,7 +4,7 @@ use std::{collections::HashSet, path::PathBuf};
 
 use thiserror::Error;
 
-use crate::{Log, LogId, Task, TaskId, TaskState};
+use crate::{Log, LogId, ProjectId, Task, TaskId, TaskState};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -20,6 +20,8 @@ pub enum Error {
     MultipleTasks(String, TaskId, Vec<Task>),
     #[error("task is missing its project ID: {0:?}")]
     TaskMissingProjectId(Task),
+    #[error("task is missing its state: {0:?}")]
+    TaskMissingState(Task),
     #[error("a log without a start time cannot be stopped")]
     LogWithoutStartCannotStop,
     #[error("cannot stop a log before it starts")]
@@ -27,9 +29,11 @@ pub enum Error {
     #[error("failed to calculate log duration from stop time: {0}")]
     LogDurationCalculationFailed(std::num::TryFromIntError),
     #[error("log for project \"{0}\"{} with ID {2} does not exist", .1.map(|task_id| format!(", task ID {}, ", task_id)).unwrap_or_else(|| "".to_string()))]
-    LogNotFound(String, Option<TaskId>, LogId),
+    LogNotFound(ProjectId, Option<TaskId>, LogId),
     #[error("log is missing its project ID: {0:?}")]
     LogMissingProjectId(Log),
+    #[error("there is currently no active log")]
+    NoActiveLog,
     #[error("invalid path: {0}")]
     InvalidPath(PathBuf),
     #[error("invalid task file name: \"{0}\"")]
@@ -66,8 +70,8 @@ pub enum Error {
     UnrecognizedTaskField(String),
     #[error("unrecognized work log field: {0}")]
     UnrecognizedLogField(String),
-    #[error("unrecognized sort direction: {0}")]
-    UnrecognizedSortDir(String),
+    #[error("unrecognized sort order: {0}")]
+    UnrecognizedSortOrder(String),
     #[error("cannot accept both duration and stop time - please supply only one of these")]
     CannotAcceptDurationAndStop,
 }

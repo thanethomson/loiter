@@ -11,9 +11,11 @@ description = """
     """
 
 [dependencies]
+comfy-table = "5.0"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+structopt = "0.3"
 thiserror = "1.0"
 time = { version = "0.3.5", features = ["formatting", "local-offset", "parsing", "serde", "macros"] }
 

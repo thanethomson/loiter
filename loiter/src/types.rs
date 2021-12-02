@@ -42,13 +42,20 @@ impl Default for TaskStateConfig {
 }
 
 impl TaskStateConfig {
-    pub fn validate_or_initial(&self, maybe_state: Option<TaskState>) -> Result<TaskState, Error> {
+    pub fn validate_or_initial<S: AsRef<str>>(
+        &self,
+        maybe_state: Option<S>,
+    ) -> Result<TaskState, Error> {
         match maybe_state {
             Some(state) => {
-                if self.states.contains(&state) {
-                    Ok(state)
+                let state = state.as_ref();
+                if self.states.contains(state) {
+                    Ok(state.to_string())
                 } else {
-                    Err(Error::InvalidTaskState(state, self.states.clone()))
+                    Err(Error::InvalidTaskState(
+                        state.to_string(),
+                        self.states.clone(),
+                    ))
                 }
             }
             None => Ok(self.initial().to_string()),
@@ -132,32 +139,32 @@ impl State {
 
 /// The direction in which to sort items.
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq)]
-pub enum SortDir {
+pub enum Order {
     /// Ascending order.
     Asc,
     /// Descending order.
     Desc,
 }
 
-impl Default for SortDir {
+impl Default for Order {
     fn default() -> Self {
         Self::Asc
     }
 }
 
-impl FromStr for SortDir {
+impl FromStr for Order {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
             "asc" | "a" => Self::Asc,
             "desc" | "d" => Self::Desc,
-            _ => return Err(Error::UnrecognizedSortDir(s.to_string())),
+            _ => return Err(Error::UnrecognizedSortOrder(s.to_string())),
         })
     }
 }
 
-impl std::fmt::Display for SortDir {
+impl std::fmt::Display for Order {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -222,6 +229,93 @@ impl std::fmt::Display for ProjectField {
                 Self::Deadline => "deadline",
             }
         )
+    }
+}
+
+/// A general, human-friendly filter for timestamps.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub enum TimestampFilter {
+    /// All entries today.
+    Today,
+    /// All entries this week (starting on a Monday).
+    ThisWeek,
+    /// All entries within the last given number of days.
+    Days(u16),
+    /// All entries this calendar month.
+    ThisMonth,
+    /// All entries this calendar year.
+    ThisYear,
+    /// All entries starting from the given timestamp (inclusive).
+    Starting(Timestamp),
+    /// All entries up to the given timestamp (exclusive).
+    Before(Timestamp),
+}
+
+impl TimestampFilter {
+    /// Given the current `now` value, does the specified timestamp `ts` match
+    /// according to the timestamp filter?
+    pub fn matches(&self, now: Timestamp, ts: Timestamp) -> bool {
+        match self {
+            Self::Today => ts >= now.today(),
+            Self::ThisWeek => ts >= now.this_week(),
+            Self::Days(days) => ts >= now.days_back(*days),
+            Self::ThisMonth => ts >= now.this_month(),
+            Self::ThisYear => ts >= now.this_year(),
+            Self::Starting(starting) => ts >= *starting,
+            Self::Before(before) => ts < *before,
+        }
+    }
+}
+
+/// A filter for durations.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
+pub enum DurationFilter {
+    LessThan(Duration),
+    LessThanOrEqual(Duration),
+    GreaterThan(Duration),
+    GreaterThanOrEqual(Duration),
+    Equal(Duration),
+}
+
+impl DurationFilter {
+    pub fn matches(&self, duration: Duration) -> bool {
+        match self {
+            Self::LessThan(d) => duration < *d,
+            Self::LessThanOrEqual(d) => duration <= *d,
+            Self::GreaterThan(d) => duration > *d,
+            Self::GreaterThanOrEqual(d) => duration >= *d,
+            Self::Equal(d) => duration == *d,
+        }
+    }
+}
+
+/// For filtering projects by the contents of specific fields.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
+pub enum ProjectFilter {
+    /// Include all projects whose deadline is present and matches the given
+    /// timestamp filter.
+    Deadline(TimestampFilter),
+    /// Include all projects whose tags match at least one of the given tags.
+    Tags(Vec<String>),
+}
+
+impl ProjectFilter {
+    /// Returns whether the given project matches this filter.
+    pub fn matches(&self, project: &Project, now: Timestamp) -> bool {
+        match self {
+            Self::Deadline(ts_filter) => project
+                .deadline()
+                .map(|deadline| ts_filter.matches(now, deadline))
+                .unwrap_or(false),
+            Self::Tags(tags) => {
+                project
+                    .tags()
+                    .collect::<HashSet<&str>>()
+                    .intersection(&HashSet::from_iter(tags.iter().map(|t| t.as_str())))
+                    .count()
+                    > 0
+            }
+        }
     }
 }
 
@@ -310,8 +404,8 @@ impl Project {
         self.maybe_description.as_deref()
     }
 
-    pub fn deadline(&self) -> Option<&Timestamp> {
-        self.maybe_deadline.as_ref()
+    pub fn deadline(&self) -> Option<Timestamp> {
+        self.maybe_deadline
     }
 
     pub fn tags(&self) -> impl Iterator<Item = &str> {
@@ -339,7 +433,7 @@ impl TaskField {
             Self::Id => a.id().cmp(&b.id()),
             Self::ProjectId => a.project_id().cmp(&b.project_id()),
             Self::Description => a.description().cmp(b.description()),
-            Self::State => a.state().cmp(b.state()),
+            Self::State => a.state().cmp(&b.state()),
             Self::Deadline => a.deadline().cmp(&b.deadline()),
         }
     }
@@ -382,6 +476,43 @@ impl std::fmt::Display for TaskField {
     }
 }
 
+/// For filtering tasks by the contents of specific fields.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
+pub enum TaskFilter {
+    /// Tasks belonging to the given project.
+    Project(ProjectId),
+    /// Tasks matching the given state.
+    State(TaskState),
+    /// Tasks whose deadline matches the given timestamp filter.
+    Deadline(TimestampFilter),
+    /// Tasks whose tags match one or more of the given tags.
+    Tags(Vec<String>),
+}
+
+impl TaskFilter {
+    /// Returns whether the given task matches this filter.
+    pub fn matches(&self, task: &Task, now: Timestamp) -> bool {
+        match self {
+            Self::Project(project_id) => task
+                .project_id()
+                .map(|id| id == project_id)
+                .unwrap_or(false),
+            Self::State(state) => task.state().map(|s| s == state).unwrap_or(false),
+            Self::Deadline(ts_filter) => task
+                .deadline()
+                .map(|deadline| ts_filter.matches(now, deadline))
+                .unwrap_or(false),
+            Self::Tags(tags) => {
+                task.tags()
+                    .collect::<HashSet<&str>>()
+                    .intersection(&HashSet::from_iter(tags.iter().map(|t| t.as_str())))
+                    .count()
+                    > 0
+            }
+        }
+    }
+}
+
 /// A discrete unit of work related to a project.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Task {
@@ -390,7 +521,8 @@ pub struct Task {
     #[serde(skip)]
     maybe_id: Option<TaskId>,
     description: String,
-    state: TaskState,
+    #[serde(rename = "state")]
+    maybe_state: Option<TaskState>,
     #[serde(rename = "deadline")]
     maybe_deadline: Option<Timestamp>,
     tags: HashSet<String>,
@@ -398,17 +530,16 @@ pub struct Task {
 
 impl Task {
     /// Constructor.
-    pub fn new<S1, S2, S3>(project_id: S1, description: S2, state: S3) -> Self
+    pub fn new<S1, S2>(project_id: S1, description: S2) -> Self
     where
         S1: AsRef<str>,
         S2: AsRef<str>,
-        S3: AsRef<str>,
     {
         Self {
             maybe_project_id: Some(project_id.as_ref().to_string()),
             maybe_id: None,
             description: description.as_ref().to_string(),
-            state: state.as_ref().to_string(),
+            maybe_state: None,
             maybe_deadline: None,
             tags: HashSet::new(),
         }
@@ -430,7 +561,12 @@ impl Task {
     }
 
     pub fn with_state<S: AsRef<str>>(mut self, state: S) -> Self {
-        self.state = state.as_ref().to_string();
+        self.maybe_state = Some(state.as_ref().to_string());
+        self
+    }
+
+    pub fn with_maybe_state(mut self, maybe_state: Option<TaskState>) -> Self {
+        self.maybe_state = maybe_state;
         self
     }
 
@@ -468,12 +604,12 @@ impl Task {
         self.description.as_str()
     }
 
-    pub fn state(&self) -> &str {
-        self.state.as_str()
+    pub fn state(&self) -> Option<&str> {
+        self.maybe_state.as_deref()
     }
 
-    pub fn deadline(&self) -> Option<&Timestamp> {
-        self.maybe_deadline.as_ref()
+    pub fn deadline(&self) -> Option<Timestamp> {
+        self.maybe_deadline
     }
 
     pub fn tags(&self) -> impl Iterator<Item = &str> {
@@ -541,6 +677,43 @@ impl std::fmt::Display for LogField {
                 Self::Comment => "comment",
             }
         )
+    }
+}
+
+/// For filtering work logs by the contents of specific fields.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
+pub enum LogFilter {
+    Project(ProjectId),
+    Task(TaskId),
+    Start(TimestampFilter),
+    Duration(DurationFilter),
+    Tags(Vec<String>),
+}
+
+impl LogFilter {
+    /// Returns whether the given work log matches this filter.
+    pub fn matches(&self, log: &Log, now: Timestamp) -> bool {
+        match self {
+            Self::Project(project_id) => {
+                log.project_id().map(|id| id == project_id).unwrap_or(false)
+            }
+            Self::Task(task_id) => log.task_id().map(|id| id == *task_id).unwrap_or(false),
+            Self::Start(ts_filter) => log
+                .start()
+                .map(|start| ts_filter.matches(now, start))
+                .unwrap_or(false),
+            Self::Duration(dur_filter) => log
+                .duration()
+                .map(|duration| dur_filter.matches(duration))
+                .unwrap_or(false),
+            Self::Tags(tags) => {
+                log.tags()
+                    .collect::<HashSet<&str>>()
+                    .intersection(&HashSet::from_iter(tags.iter().map(|t| t.as_str())))
+                    .count()
+                    > 0
+            }
+        }
     }
 }
 
@@ -617,7 +790,6 @@ impl Log {
     pub fn with_stop(mut self, stop: Timestamp) -> Result<Self, Error> {
         let start_time: OffsetDateTime = self
             .maybe_start
-            .clone()
             .ok_or(Error::LogWithoutStartCannotStop)?
             .into();
         let stop_time: OffsetDateTime = stop.into();
@@ -661,6 +833,18 @@ impl Log {
         }
     }
 
+    pub fn with_duration_or_stop_or_now(
+        self,
+        maybe_duration: Option<Duration>,
+        maybe_stop: Option<Timestamp>,
+    ) -> Result<Self, Error> {
+        if maybe_duration.is_none() && maybe_stop.is_none() {
+            self.with_stop(Timestamp::now()?)
+        } else {
+            self.with_maybe_duration_or_stop(maybe_duration, maybe_stop)
+        }
+    }
+
     pub fn with_comment<S: AsRef<str>>(mut self, comment: S) -> Self {
         self.maybe_comment = Some(comment.as_ref().to_string());
         self
@@ -695,12 +879,22 @@ impl Log {
         self.maybe_id
     }
 
-    pub fn start(&self) -> Option<&Timestamp> {
-        self.maybe_start.as_ref()
+    pub fn start(&self) -> Option<Timestamp> {
+        self.maybe_start
     }
 
-    pub fn duration(&self) -> Option<&Duration> {
-        self.maybe_duration.as_ref()
+    /// Computes the stop time from the start time and duration.
+    ///
+    /// If either the start time or the duration are not available, this returns
+    /// `None`.
+    pub fn stop(&self) -> Option<Timestamp> {
+        let start = OffsetDateTime::from(self.maybe_start?);
+        let duration = time::Duration::from(self.maybe_duration?);
+        Some((start + duration).into())
+    }
+
+    pub fn duration(&self) -> Option<Duration> {
+        self.maybe_duration
     }
 
     pub fn comment(&self) -> Option<&str> {

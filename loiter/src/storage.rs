@@ -27,13 +27,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use log::{debug, info};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::strings::slugify;
 use crate::{
-    Config, Error, Log, LogField, LogId, Project, ProjectField, SortDir, State, Task, TaskField,
-    TaskId,
+    Config, Duration, Error, Log, LogField, LogId, Order, Project, ProjectField, State, Task,
+    TaskField, TaskId, Timestamp,
 };
 
 const STARTING_TASK_ID: TaskId = 1;
@@ -114,11 +115,7 @@ impl Store {
     }
 
     /// Get a list of all of the projects in the store.
-    pub fn projects(
-        &self,
-        sort_by: ProjectField,
-        sort_dir: SortDir,
-    ) -> Result<Vec<Project>, Error> {
+    pub fn projects(&self, sort_by: ProjectField, order: Order) -> Result<Vec<Project>, Error> {
         let mut projects = fs::read_dir(&self.path)?
             .into_iter()
             .filter_map(|r| {
@@ -138,7 +135,7 @@ impl Store {
             })
             .collect::<Result<Vec<Project>, Error>>()?;
         projects.sort_by(|a, b| sort_by.sort(a, b));
-        if let SortDir::Desc = sort_dir {
+        if let Order::Desc = order {
             projects.reverse();
         }
         Ok(projects)
@@ -173,7 +170,7 @@ impl Store {
             return Err(Error::ProjectAlreadyExists(project.id().to_string()));
         }
         fs::rename(&old_path, &new_path)?;
-        log::debug!(
+        debug!(
             "Renamed directory {} to {}",
             old_path.display(),
             new_path.display()
@@ -190,7 +187,7 @@ impl Store {
         &self,
         project_id: &str,
         sort_by: TaskField,
-        sort_dir: SortDir,
+        order: Order,
     ) -> Result<Vec<Task>, Error> {
         let tasks_path = self.tasks_path(project_id);
         if !is_dir(&tasks_path) {
@@ -213,7 +210,7 @@ impl Store {
             })
             .collect::<Result<Vec<Task>, Error>>()?;
         tasks.sort_by(|a, b| sort_by.sort(a, b));
-        if let SortDir::Desc = sort_dir {
+        if let Order::Desc = order {
             tasks.reverse();
         }
         Ok(tasks)
@@ -241,7 +238,7 @@ impl Store {
 
     fn next_task_id(&self, project_id: &str) -> Result<TaskId, Error> {
         Ok(self
-            .tasks(project_id, TaskField::default(), SortDir::default())?
+            .tasks(project_id, TaskField::default(), Order::default())?
             .into_iter()
             .map(|task| task.id().unwrap())
             .max()
@@ -254,11 +251,17 @@ impl Store {
         let project_id = task
             .project_id()
             .ok_or_else(|| Error::TaskMissingProjectId(task.clone()))?;
+        let project = self.project(project_id)?;
+        let config = self.config()?;
+        let task_state_config = project
+            .task_state_config()
+            .unwrap_or_else(|| config.task_state_config());
+        let state = task_state_config.validate_or_initial(task.state())?;
         let task_id = match task.id() {
             Some(id) => id,
             None => self.next_task_id(project_id)?,
         };
-        let task = task.clone().with_id(task_id);
+        let task = task.clone().with_id(task_id).with_state(state);
         let task_path = self.task_path(project_id, task_id);
         ensure_dir_exists(&task_path)?;
 
@@ -285,7 +288,7 @@ impl Store {
                 project_id,
                 maybe_task_id,
                 LogField::default(),
-                SortDir::default(),
+                Order::default(),
             )?
             .into_iter()
             .map(|log| log.id().unwrap())
@@ -301,7 +304,7 @@ impl Store {
         project_id: &str,
         maybe_task_id: Option<TaskId>,
         sort_by: LogField,
-        sort_dir: SortDir,
+        order: Order,
     ) -> Result<Vec<Log>, Error> {
         let logs_path = self.logs_path(project_id, maybe_task_id);
         if !is_dir(&logs_path) {
@@ -324,7 +327,7 @@ impl Store {
             })
             .collect::<Result<Vec<Log>, Error>>()?;
         logs.sort_by(|a, b| sort_by.sort(a, b));
-        if let SortDir::Desc = sort_dir {
+        if let Order::Desc = order {
             logs.reverse();
         }
         Ok(logs)
@@ -347,6 +350,7 @@ impl Store {
             ));
         }
         Ok(load_from_json_file::<&PathBuf, Log>(&log_path)?
+            .with_id(id)
             .with_project_id(project_id)
             .with_maybe_task_id(maybe_task_id))
     }
@@ -374,6 +378,56 @@ impl Store {
         let log = log.clone().with_id(log_id);
         save_to_json_file(&log_path, &log)?;
         Ok(log)
+    }
+
+    /// Start the given work log.
+    pub fn start_log(&self, log: &Log) -> Result<Log, Error> {
+        let state = self.state()?;
+        let now = Timestamp::now()?;
+        // Stop any other log that's already active
+        if let Some((project_id, maybe_task_id, log_id)) = state.active_log() {
+            info!(
+                "Stopping active log {} for project {}{}",
+                log_id,
+                project_id,
+                maybe_task_id
+                    .map(|task_id| format!(", task {}", task_id))
+                    .unwrap_or_else(|| "".to_string())
+            );
+            let active_log = self
+                .log(&project_id, maybe_task_id, log_id)?
+                .with_stop(now)?;
+            let _ = self.save_log(&active_log)?;
+        }
+        // Give it a start time if it doesn't have one yet
+        let log = log.clone().with_maybe_start(log.start().or(Some(now)));
+        self.save_log(&log)
+    }
+
+    /// Stop the currently active log, if any.
+    ///
+    /// If no stop time or duration is provided, the current local time will be
+    /// used as the stop time to determine the duration of the log.
+    pub fn stop_log(
+        &self,
+        maybe_stop_time: Option<Timestamp>,
+        maybe_duration: Option<Duration>,
+        maybe_comment: Option<String>,
+        tags: Vec<String>,
+    ) -> Result<Log, Error> {
+        let state = self.state()?;
+        let (project_id, maybe_task_id, log_id) = state.active_log().ok_or(Error::NoActiveLog)?;
+        let now = Timestamp::now()?;
+        let mut active_log = self
+            .log(&project_id, maybe_task_id, log_id)?
+            .with_maybe_duration_or_stop(maybe_duration, maybe_stop_time.or(Some(now)))?;
+        if let Some(comment) = maybe_comment {
+            active_log = active_log.with_comment(&comment);
+        }
+        if !tags.is_empty() {
+            active_log = active_log.with_tags(tags)?;
+        }
+        self.save_log(&active_log)
     }
 }
 
@@ -403,7 +457,7 @@ where
     // Ensure the parent path exists
     if !is_dir(&parent_path) {
         fs::create_dir_all(parent_path)?;
-        log::debug!("Created path: {}", parent_path.display());
+        debug!("Created path: {}", parent_path.display());
     }
     let s = serde_json::to_string_pretty(obj)?;
     Ok(fs::write(path, &s)?)
@@ -434,7 +488,7 @@ fn task_id_from_path<P: AsRef<Path>>(path: P) -> Result<TaskId, Error> {
 fn log_id_from_path<P: AsRef<Path>>(path: P) -> Result<LogId, Error> {
     let path = path.as_ref();
     let file_name = path
-        .file_name()
+        .file_stem()
         .map(OsStr::to_str)
         .flatten()
         .ok_or_else(|| Error::InvalidPath(path.to_path_buf()))?;
@@ -445,7 +499,7 @@ fn ensure_dir_exists<P: AsRef<Path>>(path: P) -> Result<(), Error> {
     let path = path.as_ref();
     if !is_dir(path) {
         fs::create_dir_all(path)?;
-        log::debug!("Created path: {}", path.display());
+        debug!("Created path: {}", path.display());
     }
     Ok(())
 }

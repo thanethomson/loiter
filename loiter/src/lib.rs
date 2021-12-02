@@ -1,6 +1,7 @@
 //! Loiter provides abstractions and a simple filesystem-based storage mechanism
 //! for time tracking.
 
+pub mod cmd;
 mod error;
 mod storage;
 mod strings;

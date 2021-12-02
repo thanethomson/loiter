@@ -3,7 +3,8 @@
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use time::{format_description, OffsetDateTime, PrimitiveDateTime, Time};
+use time::macros::time;
+use time::{format_description, Date, Month, OffsetDateTime, PrimitiveDateTime, Time};
 
 use crate::Error;
 
@@ -30,7 +31,7 @@ const TIME_ONLY_FORMATS: &[&str] = &[
 const DEFAULT_TIMESTAMP_FORMAT: &str =
     "[year]-[month]-[day] [hour]:[minute] [offset_hour sign:mandatory]";
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Ord, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, PartialOrd, Ord, Eq, Hash)]
 pub struct Timestamp(#[serde(with = "timestamp_s18n")] OffsetDateTime);
 
 impl Timestamp {
@@ -40,6 +41,43 @@ impl Timestamp {
     /// error if this fails.
     pub fn now() -> Result<Self, Error> {
         Ok(Self(OffsetDateTime::now_local()?))
+    }
+
+    /// Return the timestamp of the beginning of the day today.
+    pub fn today(&self) -> Self {
+        Self(self.0.replace_time(time!(00:00)))
+    }
+
+    /// Return the timestamp of the beginning of the day on Monday of this week.
+    pub fn this_week(&self) -> Self {
+        let today = self.today().0;
+        let days_from_monday = today.weekday().number_days_from_monday();
+        // Subtract the number of days from Monday
+        let monday = today
+            - time::Duration::DAY
+                .checked_mul(days_from_monday.into())
+                .unwrap();
+        Self(monday)
+    }
+
+    /// Return the timestamp of the beginning of the day of the given number of
+    /// days back in time.
+    pub fn days_back(&self, days: u16) -> Self {
+        Self(self.today().0 - time::Duration::DAY.checked_mul(days.into()).unwrap())
+    }
+
+    /// Return the timestamp of the beginning of the day on the first day of
+    /// this month.
+    pub fn this_month(&self) -> Self {
+        let today = self.today().0;
+        Self(today.replace_date(Date::from_calendar_date(today.year(), today.month(), 1).unwrap()))
+    }
+
+    /// Return the timestamp of the beginning of the day on the first of January
+    /// of this year.
+    pub fn this_year(&self) -> Self {
+        let today = self.today().0;
+        Self(today.replace_date(Date::from_calendar_date(today.year(), Month::January, 1).unwrap()))
     }
 }
 
@@ -178,7 +216,7 @@ fn parse_prefix_offset(ts: &str) -> Result<(time::Duration, String), Error> {
 /// - `1h30m` is parsed to 1 hour and 30 minutes
 /// - `1d` is parsed to 1 day
 /// - `1w` is parsed to 1 week
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Duration(time::Duration);
 
 impl From<time::Duration> for Duration {
