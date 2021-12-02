@@ -122,6 +122,14 @@ impl std::fmt::Display for Timestamp {
     }
 }
 
+impl std::ops::Sub for Timestamp {
+    type Output = Duration;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Duration(self.0 - rhs.0)
+    }
+}
+
 mod timestamp_s18n {
     use serde::{Deserialize, Deserializer, Serializer};
     use time::{format_description::well_known::Rfc3339, OffsetDateTime};

@@ -50,6 +50,8 @@ enum Command {
     Start(cmd::StartLog),
     /// Stop the currently active work log.
     Stop(cmd::StopLog),
+    /// Show the status of the currently active work log (if any).
+    Status,
     //    Find,
     /// List projects, tasks or work logs.
     List(ListCommand),
@@ -81,6 +83,7 @@ fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
         Command::Stop(params) => {
             let _ = cmd::stop_log(&store, params)?;
         }
+        Command::Status => cmd::status(&store)?,
         Command::List(list_cmd) => list(&store, list_cmd)?,
     }
     Ok(())

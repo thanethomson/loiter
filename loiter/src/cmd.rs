@@ -428,6 +428,31 @@ pub fn list_logs(store: &Store, params: ListLogs) -> Result<String, Error> {
     Ok(table.to_string())
 }
 
+/// Shows the status of the currently active log.
+pub fn status(store: &Store) -> Result<(), Error> {
+    let state = store.state()?;
+    match state.active_log() {
+        Some((project_id, maybe_task_id, log_id)) => {
+            let active_log = store.log(&project_id, maybe_task_id, log_id)?;
+            let start = active_log.start().unwrap();
+            let duration = Timestamp::now()? - start;
+            info!(
+                "Log {} from project {}{} has been active since {} ({})",
+                active_log.id().unwrap(),
+                active_log.project_id().unwrap(),
+                active_log
+                    .task_id()
+                    .map(|task_id| format!(", task {},", task_id))
+                    .unwrap_or_else(|| "".to_string()),
+                start,
+                duration,
+            );
+        }
+        None => info!("No active log"),
+    }
+    Ok(())
+}
+
 fn parse_tags(maybe_tags: Option<String>) -> Vec<String> {
     maybe_tags
         .map(|tags| {
