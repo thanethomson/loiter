@@ -299,6 +299,8 @@ pub fn start_log(store: &Store, params: StartLog) -> Result<Log, Error> {
     }
     let log = Log::try_from(params)?;
     let log = store.save_log(&log)?;
+    let state = state.with_active_log(log.project_id().unwrap(), log.task_id(), log.id().unwrap());
+    store.save_state(&state)?;
     info!(
         "Started log {} for project {}{} at {}",
         log.id().unwrap(),
