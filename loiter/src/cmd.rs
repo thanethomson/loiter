@@ -374,6 +374,7 @@ pub fn list_tasks(store: &Store, params: ListTasks) -> Result<String, Error> {
         "ID",
         "Project ID",
         "State",
+        "Description",
         "Deadline",
         "Tags",
     ]);
@@ -382,6 +383,7 @@ pub fn list_tasks(store: &Store, params: ListTasks) -> Result<String, Error> {
             task.id().unwrap().to_string().as_str(),
             task.project_id().unwrap(),
             task.state().unwrap_or(""),
+            task.description(),
             &task
                 .deadline()
                 .map(|d| d.to_string())
