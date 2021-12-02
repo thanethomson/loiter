@@ -306,7 +306,7 @@ pub fn start_log(store: &Store, params: StartLog) -> Result<Log, Error> {
         log.id().unwrap(),
         log.project_id().unwrap(),
         log.task_id()
-            .map(|task_id| format!(", task {}", task_id))
+            .map(|task_id| format!(", task {},", task_id))
             .unwrap_or_else(|| "".to_string()),
         log.start().unwrap(),
     );
@@ -333,13 +333,15 @@ pub fn stop_log(store: &Store, params: StopLog) -> Result<Log, Error> {
     }
 
     let active_log = store.save_log(&active_log)?;
+    let state = state.with_no_active_log();
+    store.save_state(&state)?;
     info!(
         "Stopped log {} for project {}{} at {} ({})",
         active_log.id().unwrap(),
         active_log.project_id().unwrap(),
         active_log
             .task_id()
-            .map(|task_id| format!(", task {}, ", task_id))
+            .map(|task_id| format!(", task {},", task_id))
             .unwrap_or_else(|| "".to_string()),
         active_log.stop().unwrap(),
         active_log.duration().unwrap(),

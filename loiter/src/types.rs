@@ -733,7 +733,7 @@ pub struct Log {
     maybe_start: Option<Timestamp>,
     #[serde(rename = "duration")]
     maybe_duration: Option<Duration>,
-    #[serde(rename = "description")]
+    #[serde(rename = "comment")]
     maybe_comment: Option<String>,
     tags: HashSet<String>,
 }

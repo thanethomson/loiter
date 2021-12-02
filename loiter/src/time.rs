@@ -224,7 +224,7 @@ fn parse_prefix_offset(ts: &str) -> Result<(time::Duration, String), Error> {
 /// - `1h30m` is parsed to 1 hour and 30 minutes
 /// - `1d` is parsed to 1 day
 /// - `1w` is parsed to 1 week
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Duration(time::Duration);
 
 impl From<time::Duration> for Duration {
@@ -307,8 +307,27 @@ impl std::fmt::Display for Duration {
             }
         })
         .collect::<Vec<String>>()
-        .join("");
+        .join(" ");
         write!(f, "{}", s)
+    }
+}
+
+impl Serialize for Duration {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Duration {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(Duration::from_str(&s).map_err(serde::de::Error::custom)?)
     }
 }
 
@@ -344,7 +363,7 @@ fn parse_duration_components<S: AsRef<str>>(s: S) -> Result<Vec<(String, String)
             }
             DurationParserState::Unit => {
                 if c.is_digit(10) {
-                    result.push((cur_amount.clone(), cur_unit.clone()));
+                    result.push((cur_amount.trim().to_string(), cur_unit.trim().to_string()));
                     cur_amount.truncate(0);
                     cur_unit.truncate(0);
                     cur_amount.push(c);
