@@ -327,7 +327,7 @@ impl<'de> Deserialize<'de> for Duration {
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        Ok(Duration::from_str(&s).map_err(serde::de::Error::custom)?)
+        Duration::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -432,12 +432,12 @@ mod test {
             (60, "1m".to_string()),
             (1, "1s".to_string()),
             (60 * 60, "1h".to_string()),
-            ((30 * 60) + (60 * 60), "1h30m".to_string()),
+            ((30 * 60) + (60 * 60), "1h 30m".to_string()),
             (24 * 60 * 60, "1d".to_string()),
             (7 * 24 * 60 * 60, "1w".to_string()),
             (
                 (7 * 24 * 60 * 60) + (3 * 24 * 60 * 60) + (4 * 60 * 60),
-                "1w3d4h".to_string()
+                "1w 3d 4h".to_string()
             ),
         ];
     }

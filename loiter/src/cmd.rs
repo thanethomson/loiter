@@ -352,8 +352,8 @@ pub fn stop_log(store: &Store, params: StopLog) -> Result<Log, Error> {
 /// List projects, optionally sorting them.
 ///
 /// Returns the rendered table containing the results.
-pub fn list_projects(store: &Store, params: ListProjects) -> Result<String, Error> {
-    let projects = store.projects(params.sort_by, params.order)?;
+pub fn list_projects(store: &Store, _params: ListProjects) -> Result<String, Error> {
+    let projects = store.projects()?;
     let mut table = Table::new();
     table
         .load_preset(presets::ASCII_FULL)
@@ -372,7 +372,7 @@ pub fn list_projects(store: &Store, params: ListProjects) -> Result<String, Erro
 ///
 /// Returns the rendered table containing the results.
 pub fn list_tasks(store: &Store, params: ListTasks) -> Result<String, Error> {
-    let tasks = store.tasks(&params.project_id, params.sort_by, params.order)?;
+    let tasks = store.tasks(&params.project_id)?;
     let mut table = Table::new();
     table.load_preset(presets::ASCII_FULL).set_header(vec![
         "ID",
@@ -399,12 +399,7 @@ pub fn list_tasks(store: &Store, params: ListTasks) -> Result<String, Error> {
 }
 
 pub fn list_logs(store: &Store, params: ListLogs) -> Result<String, Error> {
-    let logs = store.logs(
-        &params.project_id,
-        params.maybe_task_id,
-        params.sort_by,
-        params.order,
-    )?;
+    let logs = store.logs(&params.project_id, params.maybe_task_id)?;
     let mut table = Table::new();
     table
         .load_preset(presets::ASCII_FULL)

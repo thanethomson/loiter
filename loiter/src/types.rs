@@ -80,17 +80,9 @@ impl TaskStateConfig {
 }
 
 /// Loiter global configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Config {
     task_state_config: TaskStateConfig,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            task_state_config: TaskStateConfig::default(),
-        }
-    }
 }
 
 impl Config {
@@ -105,15 +97,9 @@ impl Config {
 }
 
 /// For keeping track of the current global time tracking state.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct State {
     active_log: Option<(ProjectId, Option<TaskId>, LogId)>,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self { active_log: None }
-    }
 }
 
 impl State {
@@ -134,6 +120,123 @@ impl State {
 
     pub fn active_log(&self) -> Option<(ProjectId, Option<TaskId>, LogId)> {
         self.active_log.clone()
+    }
+}
+
+/// A type that facilitates comparisons of another type to order instances of
+/// that type.
+pub trait Comparator {
+    type Type;
+
+    fn cmp(&self, a: &Self::Type, b: &Self::Type) -> std::cmp::Ordering;
+}
+
+/// A specification as to how to sort a list of items using comparators.
+///
+/// Each comparator/ordering pair will be applied sequentially until the sorting
+/// algorithm determines that two items are not equal, at which point they will
+/// be reordered.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SortSpec<C>(Vec<(C, Order)>);
+
+impl<C> SortSpec<C>
+where
+    C: Comparator,
+{
+    /// Constructor.
+    pub fn new(comparator: C, order: Order) -> Self {
+        Self(vec![(comparator, order)])
+    }
+
+    /// Builder.
+    pub fn and_then(mut self, comparator: C, order: Order) -> Self {
+        self.0.push((comparator, order));
+        self
+    }
+
+    /// Sort the given list of items by this sort specification.
+    pub fn sort(&self, mut items: Vec<C::Type>) -> Vec<C::Type> {
+        items.sort_by(|a, b| {
+            for (comparator, order) in self.0.iter() {
+                let cmp = match order {
+                    Order::Asc => comparator.cmp(a, b),
+                    Order::Desc => comparator.cmp(b, a),
+                };
+                match cmp {
+                    std::cmp::Ordering::Less | std::cmp::Ordering::Greater => return cmp,
+                    _ => continue,
+                }
+            }
+            std::cmp::Ordering::Equal
+        });
+        items
+    }
+}
+
+impl<C> FromStr for SortSpec<C>
+where
+    C: Comparator + FromStr<Err = Error>,
+{
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // TODO: Add validation to prevent specifying the same field multiple
+        // times.
+        let specs = s
+            .split(',')
+            .map(|spec| {
+                let spec_parts = spec.trim().split(':').collect::<Vec<&str>>();
+                if spec_parts.is_empty() {
+                    return Err(Error::SortSpecHasEmptyComponent(s.to_string()));
+                }
+                if spec_parts.len() > 2 {
+                    return Err(Error::TooManyComponentsInSortSpec(
+                        s.to_string(),
+                        spec.to_string(),
+                    ));
+                }
+                let comparator = C::from_str(spec_parts[0])?;
+                let order = spec_parts
+                    .get(1)
+                    .map(|s| Order::from_str(s))
+                    .unwrap_or_else(|| Ok(Order::default()))?;
+                Ok((comparator, order))
+            })
+            .collect::<Result<Vec<(C, Order)>, Error>>()?;
+        Ok(Self(specs))
+    }
+}
+
+// Renders a sort specification. For example, the following specification:
+// [
+//     (TaskField::ProjectId, Order::Asc),
+//     (TaskField::Id, Order::Desc),
+// ]
+//
+// would be rendered as: "project-id,id:desc" (if the order is the default
+// value, then it doesn't get rendered).
+impl<C> std::fmt::Display for SortSpec<C>
+where
+    C: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.0
+                .iter()
+                .map(|(comparator, order)| format!(
+                    "{}{}",
+                    comparator,
+                    if *order == Order::default() {
+                        "".to_string()
+                    } else {
+                        format!(":{}", *order)
+                    }
+                ))
+                .collect::<Vec<String>>()
+                .join(",")
+        )
     }
 }
 
@@ -186,8 +289,16 @@ pub enum ProjectField {
     Deadline,
 }
 
-impl ProjectField {
-    pub fn sort(&self, a: &Project, b: &Project) -> std::cmp::Ordering {
+impl Default for SortSpec<ProjectField> {
+    fn default() -> Self {
+        Self(vec![(ProjectField::Name, Order::Asc)])
+    }
+}
+
+impl Comparator for ProjectField {
+    type Type = Project;
+
+    fn cmp(&self, a: &Self::Type, b: &Self::Type) -> std::cmp::Ordering {
         match self {
             Self::Id => a.id().cmp(b.id()),
             Self::Name => a.name().cmp(b.name()),
@@ -427,8 +538,19 @@ pub enum TaskField {
     Deadline,
 }
 
-impl TaskField {
-    pub fn sort(&self, a: &Task, b: &Task) -> std::cmp::Ordering {
+impl Default for SortSpec<TaskField> {
+    fn default() -> Self {
+        Self(vec![
+            (TaskField::ProjectId, Order::Asc),
+            (TaskField::Id, Order::Asc),
+        ])
+    }
+}
+
+impl Comparator for TaskField {
+    type Type = Task;
+
+    fn cmp(&self, a: &Task, b: &Task) -> std::cmp::Ordering {
         match self {
             Self::Id => a.id().cmp(&b.id()),
             Self::ProjectId => a.project_id().cmp(&b.project_id()),
@@ -628,8 +750,20 @@ pub enum LogField {
     Comment,
 }
 
-impl LogField {
-    pub fn sort(&self, a: &Log, b: &Log) -> std::cmp::Ordering {
+impl Default for SortSpec<LogField> {
+    fn default() -> Self {
+        Self(vec![
+            (LogField::ProjectId, Order::Asc),
+            (LogField::TaskId, Order::Asc),
+            (LogField::Id, Order::Asc),
+        ])
+    }
+}
+
+impl Comparator for LogField {
+    type Type = Log;
+
+    fn cmp(&self, a: &Log, b: &Log) -> std::cmp::Ordering {
         match self {
             Self::Id => a.id().cmp(&b.id()),
             Self::ProjectId => a.project_id().cmp(&b.project_id()),
@@ -917,5 +1051,52 @@ fn validate_tag<S: AsRef<str>>(tag: S) -> Result<String, Error> {
         Err(Error::TagHasInvalidChars(tag))
     } else {
         Ok(tag)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{Order, ProjectField, SortSpec};
+    use lazy_static::lazy_static;
+    use std::str::FromStr;
+
+    lazy_static! {
+        static ref SORT_SPEC_PARSING_TEST_CASES: Vec<(&'static str, SortSpec<ProjectField>)> = vec![
+            ("id", SortSpec::new(ProjectField::Id, Order::Asc)),
+            (
+                "id,name",
+                SortSpec::new(ProjectField::Id, Order::Asc)
+                    .and_then(ProjectField::Name, Order::Asc)
+            ),
+            (
+                "id:d, name:a",
+                SortSpec::new(ProjectField::Id, Order::Desc)
+                    .and_then(ProjectField::Name, Order::Asc),
+            )
+        ];
+        static ref SORT_SPEC_DISPLAY_TEST_CASES: Vec<(SortSpec<ProjectField>, &'static str)> = vec![
+            (SortSpec::new(ProjectField::Id, Order::Asc), "id"),
+            (
+                SortSpec::new(ProjectField::Name, Order::Desc)
+                    .and_then(ProjectField::Id, Order::Asc),
+                "name:desc,id"
+            ),
+        ];
+    }
+
+    #[test]
+    fn sort_spec_parsing() {
+        for (s, expected) in SORT_SPEC_PARSING_TEST_CASES.iter() {
+            let actual = SortSpec::<ProjectField>::from_str(s).unwrap();
+            assert_eq!(actual, expected.clone());
+        }
+    }
+
+    #[test]
+    fn sort_spec_display() {
+        for (s, expected) in SORT_SPEC_DISPLAY_TEST_CASES.iter() {
+            let actual = s.to_string();
+            assert_eq!(&actual, expected);
+        }
     }
 }

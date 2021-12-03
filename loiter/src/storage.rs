@@ -32,10 +32,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::strings::slugify;
-use crate::{
-    Config, Duration, Error, Log, LogField, LogId, Order, Project, ProjectField, State, Task,
-    TaskField, TaskId, Timestamp,
-};
+use crate::{Config, Duration, Error, Log, LogId, Project, State, Task, TaskId, Timestamp};
 
 const STARTING_TASK_ID: TaskId = 1;
 const STARTING_LOG_ID: LogId = 1;
@@ -115,8 +112,8 @@ impl Store {
     }
 
     /// Get a list of all of the projects in the store.
-    pub fn projects(&self, sort_by: ProjectField, order: Order) -> Result<Vec<Project>, Error> {
-        let mut projects = fs::read_dir(&self.path)?
+    pub fn projects(&self) -> Result<Vec<Project>, Error> {
+        let projects = fs::read_dir(&self.path)?
             .into_iter()
             .filter_map(|r| {
                 if let Ok(e) = r {
@@ -134,10 +131,6 @@ impl Store {
                 None
             })
             .collect::<Result<Vec<Project>, Error>>()?;
-        projects.sort_by(|a, b| sort_by.sort(a, b));
-        if let Order::Desc = order {
-            projects.reverse();
-        }
         Ok(projects)
     }
 
@@ -183,17 +176,12 @@ impl Store {
     }
 
     /// Get all of the tasks for the project with the specified ID.
-    pub fn tasks(
-        &self,
-        project_id: &str,
-        sort_by: TaskField,
-        order: Order,
-    ) -> Result<Vec<Task>, Error> {
+    pub fn tasks(&self, project_id: &str) -> Result<Vec<Task>, Error> {
         let tasks_path = self.tasks_path(project_id);
         if !is_dir(&tasks_path) {
             return Ok(Vec::new());
         }
-        let mut tasks = fs::read_dir(&tasks_path)?
+        let tasks = fs::read_dir(&tasks_path)?
             .into_iter()
             .filter_map(|r| {
                 if let Ok(e) = r {
@@ -209,10 +197,6 @@ impl Store {
                 None
             })
             .collect::<Result<Vec<Task>, Error>>()?;
-        tasks.sort_by(|a, b| sort_by.sort(a, b));
-        if let Order::Desc = order {
-            tasks.reverse();
-        }
         Ok(tasks)
     }
 
@@ -238,7 +222,7 @@ impl Store {
 
     fn next_task_id(&self, project_id: &str) -> Result<TaskId, Error> {
         Ok(self
-            .tasks(project_id, TaskField::default(), Order::default())?
+            .tasks(project_id)?
             .into_iter()
             .map(|task| task.id().unwrap())
             .max()
@@ -284,12 +268,7 @@ impl Store {
 
     fn next_log_id(&self, project_id: &str, maybe_task_id: Option<TaskId>) -> Result<LogId, Error> {
         Ok(self
-            .logs(
-                project_id,
-                maybe_task_id,
-                LogField::default(),
-                Order::default(),
-            )?
+            .logs(project_id, maybe_task_id)?
             .into_iter()
             .map(|log| log.id().unwrap())
             .max()
@@ -299,18 +278,12 @@ impl Store {
 
     /// Get all of the logs associated with the given project, and optionally
     /// with the given task.
-    pub fn logs(
-        &self,
-        project_id: &str,
-        maybe_task_id: Option<TaskId>,
-        sort_by: LogField,
-        order: Order,
-    ) -> Result<Vec<Log>, Error> {
+    pub fn logs(&self, project_id: &str, maybe_task_id: Option<TaskId>) -> Result<Vec<Log>, Error> {
         let logs_path = self.logs_path(project_id, maybe_task_id);
         if !is_dir(&logs_path) {
             return Ok(Vec::new());
         }
-        let mut logs = fs::read_dir(&logs_path)?
+        let logs = fs::read_dir(&logs_path)?
             .into_iter()
             .filter_map(|r| {
                 if let Ok(e) = r {
@@ -326,10 +299,6 @@ impl Store {
                 None
             })
             .collect::<Result<Vec<Log>, Error>>()?;
-        logs.sort_by(|a, b| sort_by.sort(a, b));
-        if let Order::Desc = order {
-            logs.reverse();
-        }
         Ok(logs)
     }
 

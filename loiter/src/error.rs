@@ -74,4 +74,8 @@ pub enum Error {
     UnrecognizedSortOrder(String),
     #[error("cannot accept both duration and stop time - please supply only one of these")]
     CannotAcceptDurationAndStop,
+    #[error("sort specification cannot have empty components: {0}")]
+    SortSpecHasEmptyComponent(String),
+    #[error("sort specification \"{0}\" has too many parts in \"{1}\" (only a single colon is allowed for each field)")]
+    TooManyComponentsInSortSpec(String, String),
 }
