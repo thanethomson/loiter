@@ -1,12 +1,13 @@
 //! User-oriented functionality for interacting with Loiter stores.
 
 use crate::{
-    Duration, Error, Log, LogField, Order, Project, ProjectField, ProjectId, Store, Task,
+    Duration, Error, Log, LogField, Order, Project, ProjectField, ProjectId, SortSpec, Store, Task,
     TaskField, TaskId, TaskState, Timestamp,
 };
 use comfy_table::{presets, Table};
 use log::info;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use structopt::StructOpt;
 
 /// Add a new project.
@@ -256,13 +257,12 @@ pub struct ListProjects {
     #[structopt(short, long)]
     detailed: bool,
 
-    /// Sort projects by the given field.
-    #[structopt(short, long, default_value)]
-    sort_by: ProjectField,
-
-    /// Sort order ("asc" for ascending order, or "desc" for descending order).
-    #[structopt(short, long, default_value)]
-    order: Order,
+    /// Optionally sort the projects by specific fields (e.g. "name" will sort
+    /// projects in ascending order by name; "name:desc" will sort by name in
+    /// descending order; "deadline,name" will first sort by deadline and then
+    /// by name).
+    #[structopt(short, long)]
+    sort: Option<String>,
 }
 
 /// List all of the tasks for a project.
@@ -424,18 +424,34 @@ pub fn stop_log(store: &Store, params: StopLog) -> Result<Log, Error> {
 /// List projects, optionally sorting them.
 ///
 /// Returns the rendered table containing the results.
-pub fn list_projects(store: &Store, _params: ListProjects) -> Result<String, Error> {
-    let projects = store.projects()?;
+pub fn list_projects(store: &Store, params: ListProjects) -> Result<String, Error> {
+    let mut projects = store.projects()?;
+    if let Some(sort) = params.sort {
+        let sort_spec = SortSpec::<ProjectField>::from_str(&sort)?;
+        projects = sort_spec.sort(projects);
+    }
     let mut table = Table::new();
-    table
-        .load_preset(presets::ASCII_FULL)
-        .set_header(vec!["ID", "Name", "Tags"]);
+    let header = if params.detailed {
+        vec!["ID", "Name", "Description", "Deadline", "Tags"]
+    } else {
+        vec!["ID", "Name", "Tags"]
+    };
+    table.load_preset(presets::ASCII_FULL).set_header(header);
     for project in projects.iter() {
-        table.add_row(vec![
-            project.id(),
-            project.name(),
-            &project.tags().collect::<Vec<&str>>().join(", "),
-        ]);
+        let deadline = display_optional(project.deadline());
+        let tags = project.tags().collect::<Vec<&str>>().join(", ");
+        let row = if params.detailed {
+            vec![
+                project.id(),
+                project.name(),
+                project.description().unwrap_or(""),
+                &deadline,
+                &tags,
+            ]
+        } else {
+            vec![project.id(), project.name(), &tags]
+        };
+        table.add_row(row);
     }
     Ok(table.to_string())
 }
@@ -556,4 +572,10 @@ fn parse_tags(maybe_tags: Option<String>) -> Vec<String> {
                 .collect::<Vec<String>>()
         })
         .unwrap_or_else(Vec::new)
+}
+
+fn display_optional<S: std::fmt::Display>(maybe_value: Option<S>) -> String {
+    maybe_value
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "".to_string())
 }
