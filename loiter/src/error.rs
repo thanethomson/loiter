@@ -32,6 +32,8 @@ pub enum Error {
     LogNotFound(ProjectId, Option<TaskId>, LogId),
     #[error("log is missing its project ID: {0:?}")]
     LogMissingProjectId(Log),
+    #[error("log is missing its ID: {0:?}")]
+    LogMissingId(Log),
     #[error("there is currently no active log")]
     NoActiveLog,
     #[error("invalid path: {0}")]
@@ -50,8 +52,8 @@ pub enum Error {
     InvalidLogNumber(PathBuf, std::num::ParseIntError),
     #[error("I/O failure: {0}")]
     Io(#[from] std::io::Error),
-    #[error("serialization failed: {0}")]
-    Serialize(#[from] serde_json::Error),
+    #[error("serialization failed: {0}\n{1}")]
+    Serialize(serde_json::Error, String),
     #[error("invalid date/time format: {0}")]
     InvalidDateTimeFormat(#[from] time::error::InvalidFormatDescription),
     #[error("invalid date/time: {0}")]

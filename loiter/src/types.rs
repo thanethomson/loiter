@@ -84,7 +84,7 @@ impl TaskStateConfig {
             Some(state) => {
                 let state = state.as_ref().to_string();
                 if self.states.contains(&state) {
-                    Ok(state.to_string())
+                    Ok(state)
                 } else {
                     Err(Error::InvalidTaskState(state, self.states.clone()))
                 }

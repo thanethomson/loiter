@@ -373,6 +373,8 @@ pub fn start_log(store: &Store, params: StartLog) -> Result<Log, Error> {
     let log = store.save_log(&log)?;
     let state = state.with_active_log(log.project_id().unwrap(), log.task_id(), log.id().unwrap());
     store.save_state(&state)?;
+    // TODO: If this is associated with a task, change the task's status to in
+    // progress.
     info!(
         "Started log {} for project {}{} at {}",
         log.id().unwrap(),
@@ -419,6 +421,34 @@ pub fn stop_log(store: &Store, params: StopLog) -> Result<Log, Error> {
         active_log.duration().unwrap(),
     );
     Ok(active_log)
+}
+
+/// Cancels the active work log, if any.
+pub fn cancel_log(store: &Store) -> Result<(), Error> {
+    let state = store.state()?;
+    let active_log = match state.active_log() {
+        Some((project_id, maybe_task_id, log_id)) => {
+            store.log(&project_id, maybe_task_id, log_id)?
+        }
+        None => return Err(Error::NoActiveLog),
+    };
+    store.delete_log(
+        active_log.project_id().unwrap(),
+        active_log.task_id(),
+        active_log.id().unwrap(),
+    )?;
+    let state = state.with_no_active_log();
+    store.save_state(&state)?;
+    info!(
+        "Cancelled log {} for project {}{}",
+        active_log.id().unwrap(),
+        active_log.project_id().unwrap(),
+        active_log
+            .task_id()
+            .map(|task_id| format!(", task {},", task_id))
+            .unwrap_or_else(|| "".to_string()),
+    );
+    Ok(())
 }
 
 /// List projects, optionally sorting them.

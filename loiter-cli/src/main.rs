@@ -52,6 +52,8 @@ enum Command {
     Start(cmd::StartLog),
     /// Stop the currently active work log.
     Stop(cmd::StopLog),
+    /// Cancel the currently active work log.
+    Cancel,
     /// Show the status of the currently active work log (if any).
     Status,
     /// Show a list of valid task states.
@@ -93,6 +95,7 @@ fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
         Command::Stop(params) => {
             let _ = cmd::stop_log(&store, params)?;
         }
+        Command::Cancel => cmd::cancel_log(&store)?,
         Command::Status => cmd::status(&store)?,
         Command::States(params) => {
             println!("{}", cmd::task_states(&store, params)?);

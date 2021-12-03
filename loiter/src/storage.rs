@@ -27,12 +27,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use log::{debug, info};
+use log::debug;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::strings::slugify;
-use crate::{Config, Duration, Error, Log, LogId, Project, State, Task, TaskId, Timestamp};
+use crate::{Config, Error, Log, LogId, Project, State, Task, TaskId};
 
 const STARTING_TASK_ID: TaskId = 1;
 const STARTING_LOG_ID: LogId = 1;
@@ -349,54 +349,16 @@ impl Store {
         Ok(log)
     }
 
-    /// Start the given work log.
-    pub fn start_log(&self, log: &Log) -> Result<Log, Error> {
-        let state = self.state()?;
-        let now = Timestamp::now()?;
-        // Stop any other log that's already active
-        if let Some((project_id, maybe_task_id, log_id)) = state.active_log() {
-            info!(
-                "Stopping active log {} for project {}{}",
-                log_id,
-                project_id,
-                maybe_task_id
-                    .map(|task_id| format!(", task {}", task_id))
-                    .unwrap_or_else(|| "".to_string())
-            );
-            let active_log = self
-                .log(&project_id, maybe_task_id, log_id)?
-                .with_stop(now)?;
-            let _ = self.save_log(&active_log)?;
-        }
-        // Give it a start time if it doesn't have one yet
-        let log = log.clone().with_maybe_start(log.start().or(Some(now)));
-        self.save_log(&log)
-    }
-
-    /// Stop the currently active log, if any.
-    ///
-    /// If no stop time or duration is provided, the current local time will be
-    /// used as the stop time to determine the duration of the log.
-    pub fn stop_log(
+    /// Delete the given log from the store.
+    pub fn delete_log(
         &self,
-        maybe_stop_time: Option<Timestamp>,
-        maybe_duration: Option<Duration>,
-        maybe_comment: Option<String>,
-        tags: Vec<String>,
-    ) -> Result<Log, Error> {
-        let state = self.state()?;
-        let (project_id, maybe_task_id, log_id) = state.active_log().ok_or(Error::NoActiveLog)?;
-        let now = Timestamp::now()?;
-        let mut active_log = self
-            .log(&project_id, maybe_task_id, log_id)?
-            .with_maybe_duration_or_stop(maybe_duration, maybe_stop_time.or(Some(now)))?;
-        if let Some(comment) = maybe_comment {
-            active_log = active_log.with_comment(&comment);
-        }
-        if !tags.is_empty() {
-            active_log = active_log.with_tags(tags)?;
-        }
-        self.save_log(&active_log)
+        project_id: &str,
+        maybe_task_id: Option<TaskId>,
+        id: TaskId,
+    ) -> Result<(), Error> {
+        let log_path = self.log_path(project_id, maybe_task_id, id);
+        fs::remove_file(&log_path)?;
+        Ok(())
     }
 }
 
@@ -411,13 +373,13 @@ where
         return Err(Error::FileNotFound(path.to_path_buf()));
     }
     let s = fs::read_to_string(path)?;
-    Ok(serde_json::from_str(&s)?)
+    serde_json::from_str(&s).map_err(|e| Error::Serialize(e, s))
 }
 
 fn save_to_json_file<P, O>(path: P, obj: &O) -> Result<(), Error>
 where
     P: AsRef<Path>,
-    O: Serialize,
+    O: Serialize + std::fmt::Debug,
 {
     let path = path.as_ref();
     let parent_path = path
@@ -428,7 +390,8 @@ where
         fs::create_dir_all(parent_path)?;
         debug!("Created path: {}", parent_path.display());
     }
-    let s = serde_json::to_string_pretty(obj)?;
+    let s =
+        serde_json::to_string_pretty(obj).map_err(|e| Error::Serialize(e, format!("{:?}", obj)))?;
     Ok(fs::write(path, &s)?)
 }
 
