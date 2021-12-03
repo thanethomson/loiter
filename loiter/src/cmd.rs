@@ -100,7 +100,7 @@ pub struct UpdateTask {
     maybe_state: Option<TaskState>,
 
     /// Update the deadline for the task.
-    #[structopt(name = "deadline", short, long)]
+    #[structopt(name = "deadline", long)]
     #[serde(rename = "deadline")]
     maybe_deadline: Option<Timestamp>,
 
@@ -309,6 +309,12 @@ pub struct ListLogs {
     order: Order,
 }
 
+#[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
+pub struct TaskStates {
+    #[structopt(name = "project", short, long)]
+    maybe_project_id: Option<ProjectId>,
+}
+
 /// Add a new project to the given store.
 pub fn add_project(store: &Store, params: AddProject) -> Result<Project, Error> {
     let project = Project::try_from(params)?;
@@ -464,6 +470,7 @@ pub fn list_tasks(store: &Store, params: ListTasks) -> Result<String, Error> {
     Ok(table.to_string())
 }
 
+/// List work logs, filtered and ordered by the given parameters.
 pub fn list_logs(store: &Store, params: ListLogs) -> Result<String, Error> {
     let logs = store.logs(&params.project_id, params.maybe_task_id)?;
     let mut table = Table::new();
@@ -514,6 +521,31 @@ pub fn status(store: &Store) -> Result<(), Error> {
         None => info!("No active log"),
     }
     Ok(())
+}
+
+/// Shows a list of task states. If no project is supplied, the default
+/// configuration will be shown.
+pub fn task_states(store: &Store, params: TaskStates) -> Result<String, Error> {
+    let config = store.config()?;
+    let default_tsc = config.task_state_config();
+    let maybe_project = match params.maybe_project_id {
+        Some(id) => Some(store.project(&id)?),
+        None => None,
+    };
+    let states = maybe_project
+        .map(|p| p.task_states(default_tsc))
+        .unwrap_or_else(|| {
+            default_tsc
+                .states()
+                .map(|s| s.to_string())
+                .collect::<Vec<TaskState>>()
+        });
+    let mut table = Table::new();
+    table.load_preset(presets::ASCII_FULL);
+    for state in states.iter() {
+        table.add_row(vec![state]);
+    }
+    Ok(table.to_string())
 }
 
 fn parse_tags(maybe_tags: Option<String>) -> Vec<String> {

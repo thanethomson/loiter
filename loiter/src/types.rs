@@ -12,6 +12,9 @@ pub type TaskId = u32;
 pub type LogId = u32;
 pub type TaskState = String;
 
+/// The minimum number of task states.
+pub const MIN_TASK_STATES: usize = 3;
+
 const DEFAULT_INITIAL_TASK_STATE: &str = "inbox";
 const DEFAULT_IN_PROGRESS_TASK_STATE: &str = "doing";
 const DEFAULT_DONE_TASK_STATE: &str = "done";
@@ -24,7 +27,7 @@ const DEFAULT_TASK_STATES: &[&str] = &[
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TaskStateConfig {
-    states: HashSet<TaskState>,
+    states: Vec<TaskState>,
     initial: TaskState,
     in_progress: TaskState,
     done: TaskState,
@@ -33,7 +36,7 @@ pub struct TaskStateConfig {
 impl Default for TaskStateConfig {
     fn default() -> Self {
         Self {
-            states: HashSet::from_iter(DEFAULT_TASK_STATES.iter().map(|s| s.to_string())),
+            states: DEFAULT_TASK_STATES.iter().map(|s| s.to_string()).collect(),
             initial: DEFAULT_INITIAL_TASK_STATE.to_string(),
             in_progress: DEFAULT_IN_PROGRESS_TASK_STATE.to_string(),
             done: DEFAULT_DONE_TASK_STATE.to_string(),
@@ -42,20 +45,48 @@ impl Default for TaskStateConfig {
 }
 
 impl TaskStateConfig {
+    /// Constructor.
+    pub fn new(
+        states: Vec<TaskState>,
+        initial: TaskState,
+        in_progress: TaskState,
+        done: TaskState,
+    ) -> Result<Self, Error> {
+        if states.len() < MIN_TASK_STATES {
+            return Err(Error::TooFewTaskStates(states.len(), MIN_TASK_STATES));
+        }
+        let states_set = states.clone().into_iter().collect::<HashSet<String>>();
+        if states_set.len() != states.len() {
+            return Err(Error::DuplicateTaskStates(states));
+        }
+        for state in [&initial, &in_progress, &done] {
+            if !states_set.contains(state) {
+                return Err(Error::InvalidTaskState(state.clone(), states));
+            }
+        }
+        Ok(Self {
+            states,
+            initial,
+            in_progress,
+            done,
+        })
+    }
+
+    /// If specified, checks whether the given string is a valid task state.
+    ///
+    /// If `maybe_state` is `None`, this returns the default initial task state
+    /// for this configuration.
     pub fn validate_or_initial<S: AsRef<str>>(
         &self,
         maybe_state: Option<S>,
     ) -> Result<TaskState, Error> {
         match maybe_state {
             Some(state) => {
-                let state = state.as_ref();
-                if self.states.contains(state) {
+                let state = state.as_ref().to_string();
+                if self.states.contains(&state) {
                     Ok(state.to_string())
                 } else {
-                    Err(Error::InvalidTaskState(
-                        state.to_string(),
-                        self.states.clone(),
-                    ))
+                    Err(Error::InvalidTaskState(state, self.states.clone()))
                 }
             }
             None => Ok(self.initial().to_string()),
@@ -525,6 +556,18 @@ impl Project {
 
     pub fn task_state_config(&self) -> Option<&TaskStateConfig> {
         self.maybe_task_state_config.as_ref()
+    }
+
+    /// Convenience method to return an ordered list of task states supported by
+    /// this project, using the given default config if this project has no
+    /// custom task states.
+    pub fn task_states(&self, default_config: &TaskStateConfig) -> Vec<TaskState> {
+        self.maybe_task_state_config
+            .as_ref()
+            .map(|tsc| tsc.states())
+            .unwrap_or_else(|| default_config.states())
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>()
     }
 }
 

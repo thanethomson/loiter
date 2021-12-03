@@ -1,6 +1,6 @@
 //! Errors handling for Loiter.
 
-use std::{collections::HashSet, path::PathBuf};
+use std::path::PathBuf;
 
 use thiserror::Error;
 
@@ -41,7 +41,11 @@ pub enum Error {
     #[error("failed to parse task number from filename \"{0}\": {1}")]
     InvalidTaskNumber(PathBuf, std::num::ParseIntError),
     #[error("invalid task state: \"{0}\" (supported values: {})", .1.iter().map(|s| s.to_string()).collect::<Vec<String>>().join(", "))]
-    InvalidTaskState(TaskState, HashSet<TaskState>),
+    InvalidTaskState(TaskState, Vec<TaskState>),
+    #[error("task states must be unique; duplicate found in \"{}\"", .0.join(", "))]
+    DuplicateTaskStates(Vec<TaskState>),
+    #[error("too few task states ({0}) - there must be at least {1}")]
+    TooFewTaskStates(usize, usize),
     #[error("failed to parse log number from filename \"{0}\": {1}")]
     InvalidLogNumber(PathBuf, std::num::ParseIntError),
     #[error("I/O failure: {0}")]
