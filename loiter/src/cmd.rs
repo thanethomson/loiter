@@ -80,10 +80,61 @@ impl TryFrom<AddTask> for Task {
     }
 }
 
+/// Update a specific task.
+#[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
+pub struct UpdateTask {
+    /// The ID of the project whose task must be updated.
+    project_id: ProjectId,
+
+    /// The ID of the task to update.
+    task_id: TaskId,
+
+    /// Update the task description.
+    #[structopt(name = "description", short, long)]
+    #[serde(rename = "description")]
+    maybe_description: Option<String>,
+
+    /// Update the state of the task.
+    #[structopt(name = "state", short, long)]
+    #[serde(rename = "state")]
+    maybe_state: Option<TaskState>,
+
+    /// Update the deadline for the task.
+    #[structopt(name = "deadline", short, long)]
+    #[serde(rename = "deadline")]
+    maybe_deadline: Option<Timestamp>,
+
+    /// Update the task's tags.
+    #[structopt(name = "tags", long)]
+    #[serde(rename = "tags")]
+    maybe_tags: Option<String>,
+}
+
+impl UpdateTask {
+    /// Apply this update to the given task.
+    pub fn apply(&self, task: &Task) -> Result<Task, Error> {
+        let mut task = task.clone();
+        if let Some(description) = &self.maybe_description {
+            task = task.with_description(description);
+        }
+        if let Some(state) = &self.maybe_state {
+            task = task.with_state(state);
+        }
+        if let Some(deadline) = &self.maybe_deadline {
+            task = task.with_deadline(*deadline);
+        }
+        if let Some(tags) = &self.maybe_tags {
+            task = task.with_tags(parse_tags(Some(tags.clone())))?;
+        }
+        Ok(task)
+    }
+}
+
 /// Add a completed work log for a project or task.
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
 pub struct AddLog {
     /// The ID of the project to which to add this work log.
+    #[structopt(name = "project")]
     project_id: ProjectId,
 
     /// Optionally, the ID of the task to which this work log relates.
@@ -137,6 +188,7 @@ impl TryFrom<AddLog> for Log {
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
 pub struct StartLog {
     /// The ID of the project to which to add this work log.
+    #[structopt(name = "project")]
     project_id: ProjectId,
 
     /// Optionally, the ID of the task to which this work log relates.
@@ -217,6 +269,7 @@ pub struct ListProjects {
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
 pub struct ListTasks {
     /// The ID of the project whose tasks must be listed.
+    #[structopt(name = "project")]
     project_id: ProjectId,
 
     /// Show task details as opposed to just task IDs and descriptions.
@@ -236,6 +289,7 @@ pub struct ListTasks {
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
 pub struct ListLogs {
     /// The ID of the project whose logs must be listed.
+    #[structopt(name = "project")]
     project_id: ProjectId,
 
     /// The ID of the task whose logs must be listed (if applicable).
@@ -271,6 +325,18 @@ pub fn add_task(store: &Store, params: AddTask) -> Result<Task, Error> {
         "Added task {} for project {}",
         task.id().unwrap(),
         task.project_id().unwrap()
+    );
+    Ok(task)
+}
+
+/// Update one or more fields of a specific task.
+pub fn update_task(store: &Store, params: UpdateTask) -> Result<Task, Error> {
+    let task = store.task(&params.project_id, params.task_id)?;
+    let task = store.save_task(&params.apply(&task)?)?;
+    info!(
+        "Updated task {} for project {}",
+        task.id().unwrap(),
+        task.project_id().unwrap(),
     );
     Ok(task)
 }

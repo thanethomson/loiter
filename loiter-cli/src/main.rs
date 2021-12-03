@@ -46,6 +46,8 @@ struct Opt {
 enum Command {
     /// Add a project, task or work log.
     Add(AddCommand),
+    /// Update a project, task or work log.
+    Update(UpdateCommand),
     /// Start a work log.
     Start(cmd::StartLog),
     /// Stop the currently active work log.
@@ -67,6 +69,11 @@ enum AddCommand {
 }
 
 #[derive(Debug, StructOpt)]
+enum UpdateCommand {
+    Task(cmd::UpdateTask),
+}
+
+#[derive(Debug, StructOpt)]
 enum ListCommand {
     Projects(cmd::ListProjects),
     Tasks(cmd::ListTasks),
@@ -77,6 +84,7 @@ fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
     let store = Store::new(&opt.path.0)?;
     match opt.command {
         Command::Add(sub_cmd) => add(&store, sub_cmd)?,
+        Command::Update(sub_cmd) => update(&store, sub_cmd)?,
         Command::Start(params) => {
             let _ = cmd::start_log(&store, params)?;
         }
@@ -99,6 +107,15 @@ fn add(store: &Store, cmd: AddCommand) -> Result<(), Box<dyn Error>> {
         }
         AddCommand::Log(params) => {
             let _ = cmd::add_log(store, params)?;
+        }
+    }
+    Ok(())
+}
+
+fn update(store: &Store, cmd: UpdateCommand) -> Result<(), Box<dyn Error>> {
+    match cmd {
+        UpdateCommand::Task(params) => {
+            let _ = cmd::update_task(store, params)?;
         }
     }
     Ok(())
