@@ -5,7 +5,7 @@ use crate::{
     TaskField, TaskId, TaskState, Timestamp,
 };
 use comfy_table::{presets, Table};
-use log::info;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use structopt::StructOpt;
@@ -319,7 +319,7 @@ pub struct TaskStates {
 pub fn add_project(store: &Store, params: AddProject) -> Result<Project, Error> {
     let project = Project::try_from(params)?;
     store.save_project(&project)?;
-    info!("Created new project {}", project.name());
+    debug!("Created new project {}", project.name());
     Ok(project)
 }
 
@@ -327,7 +327,7 @@ pub fn add_project(store: &Store, params: AddProject) -> Result<Project, Error> 
 pub fn add_task(store: &Store, params: AddTask) -> Result<Task, Error> {
     let task = Task::try_from(params)?;
     let task = store.save_task(&task)?;
-    info!(
+    debug!(
         "Added task {} for project {}",
         task.id().unwrap(),
         task.project_id().unwrap()
@@ -339,7 +339,7 @@ pub fn add_task(store: &Store, params: AddTask) -> Result<Task, Error> {
 pub fn update_task(store: &Store, params: UpdateTask) -> Result<Task, Error> {
     let task = store.task(&params.project_id, params.task_id)?;
     let task = store.save_task(&params.apply(&task)?)?;
-    info!(
+    debug!(
         "Updated task {} for project {}",
         task.id().unwrap(),
         task.project_id().unwrap(),
@@ -351,7 +351,7 @@ pub fn update_task(store: &Store, params: UpdateTask) -> Result<Task, Error> {
 pub fn add_log(store: &Store, params: AddLog) -> Result<Log, Error> {
     let log = Log::try_from(params)?;
     let log = store.save_log(&log)?;
-    info!(
+    debug!(
         "Added log {} for project {}{}",
         log.id().unwrap(),
         log.project_id().unwrap(),
@@ -375,7 +375,7 @@ pub fn start_log(store: &Store, params: StartLog) -> Result<Log, Error> {
     store.save_state(&state)?;
     // TODO: If this is associated with a task, change the task's status to in
     // progress.
-    info!(
+    debug!(
         "Started log {} for project {}{} at {}",
         log.id().unwrap(),
         log.project_id().unwrap(),
@@ -409,7 +409,7 @@ pub fn stop_log(store: &Store, params: StopLog) -> Result<Log, Error> {
     let active_log = store.save_log(&active_log)?;
     let state = state.with_no_active_log();
     store.save_state(&state)?;
-    info!(
+    debug!(
         "Stopped log {} for project {}{} at {} ({})",
         active_log.id().unwrap(),
         active_log.project_id().unwrap(),
@@ -439,7 +439,7 @@ pub fn cancel_log(store: &Store) -> Result<(), Error> {
     )?;
     let state = state.with_no_active_log();
     store.save_state(&state)?;
-    info!(
+    debug!(
         "Cancelled log {} for project {}{}",
         active_log.id().unwrap(),
         active_log.project_id().unwrap(),
@@ -552,7 +552,7 @@ pub fn status(store: &Store) -> Result<(), Error> {
             let active_log = store.log(&project_id, maybe_task_id, log_id)?;
             let start = active_log.start().unwrap();
             let duration = Timestamp::now()? - start;
-            info!(
+            debug!(
                 "Log {} from project {}{} has been active since {} ({})",
                 active_log.id().unwrap(),
                 active_log.project_id().unwrap(),
@@ -564,7 +564,7 @@ pub fn status(store: &Store) -> Result<(), Error> {
                 duration,
             );
         }
-        None => info!("No active log"),
+        None => debug!("No active log"),
     }
     Ok(())
 }
