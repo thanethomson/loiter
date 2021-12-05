@@ -184,7 +184,6 @@ dependencies = [
 name = "loiter"
 version = "0.1.0"
 dependencies = [
- "comfy-table",
  "lazy_static",
  "log",
  "serde",
@@ -199,6 +198,8 @@ dependencies = [
 name = "loiter-cli"
 version = "0.1.0"
 dependencies = [
+ "comfy-table",
+ "crossterm",
  "home",
  "log",
  "loiter",

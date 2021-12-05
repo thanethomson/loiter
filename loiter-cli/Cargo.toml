@@ -12,6 +12,8 @@ name = "loiter"
 path = "src/main.rs"
 
 [dependencies]
+comfy-table = "5.0.0"
+crossterm = "0.22.1"
 home = "0.5.3"
 log = "0.4"
 loiter = { version = "0.1.0", path = "../loiter" }

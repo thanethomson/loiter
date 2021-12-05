@@ -11,7 +11,6 @@ description = """
     """
 
 [dependencies]
-comfy-table = "5.0"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

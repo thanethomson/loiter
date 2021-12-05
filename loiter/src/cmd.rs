@@ -1,10 +1,9 @@
 //! User-oriented functionality for interacting with Loiter stores.
 
 use crate::{
-    Duration, Error, Log, LogField, Order, Project, ProjectField, ProjectId, SortSpec, Store, Task,
+    Duration, Error, Log, LogField, Project, ProjectField, ProjectId, SortSpec, Store, Task,
     TaskField, TaskId, TaskState, Timestamp,
 };
-use comfy_table::{presets, Table};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -33,14 +32,14 @@ pub struct AddProject {
     pub maybe_tags: Option<String>,
 }
 
-impl TryFrom<AddProject> for Project {
+impl TryFrom<&AddProject> for Project {
     type Error = Error;
 
-    fn try_from(cmd: AddProject) -> Result<Self, Self::Error> {
+    fn try_from(cmd: &AddProject) -> Result<Self, Self::Error> {
         Project::new(&cmd.name)
-            .with_maybe_description(cmd.maybe_description)
+            .with_maybe_description(cmd.maybe_description.clone())
             .with_maybe_deadline(cmd.maybe_deadline)
-            .with_tags(parse_tags(cmd.maybe_tags))
+            .with_tags(parse_tags(cmd.maybe_tags.clone()))
     }
 }
 
@@ -48,36 +47,36 @@ impl TryFrom<AddProject> for Project {
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
 pub struct AddTask {
     /// The ID of the project to which this task belongs.
-    project_id: ProjectId,
+    pub project_id: ProjectId,
 
     /// A short, human-readable description of what this task is about.
-    description: String,
+    pub description: String,
 
     /// The desired state of the task once added.
     #[structopt(name = "state", short, long)]
     #[serde(rename = "state")]
-    maybe_state: Option<TaskState>,
+    pub maybe_state: Option<TaskState>,
 
     /// An optional deadline for this project.
     #[structopt(name = "deadline", short, long)]
     #[serde(rename = "deadline")]
-    maybe_deadline: Option<Timestamp>,
+    pub maybe_deadline: Option<Timestamp>,
 
     /// Tags to associate with this task, separated by commas (e.g.
     /// "work,engineering,ux").
     #[structopt(name = "tags", long)]
     #[serde(rename = "tags")]
-    maybe_tags: Option<String>,
+    pub maybe_tags: Option<String>,
 }
 
-impl TryFrom<AddTask> for Task {
+impl TryFrom<&AddTask> for Task {
     type Error = Error;
 
-    fn try_from(cmd: AddTask) -> Result<Self, Self::Error> {
+    fn try_from(cmd: &AddTask) -> Result<Self, Self::Error> {
         Task::new(&cmd.project_id, &cmd.description)
-            .with_maybe_state(cmd.maybe_state)
+            .with_maybe_state(cmd.maybe_state.clone())
             .with_maybe_deadline(cmd.maybe_deadline)
-            .with_tags(parse_tags(cmd.maybe_tags))
+            .with_tags(parse_tags(cmd.maybe_tags.clone()))
     }
 }
 
@@ -85,30 +84,30 @@ impl TryFrom<AddTask> for Task {
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
 pub struct UpdateTask {
     /// The ID of the project whose task must be updated.
-    project_id: ProjectId,
+    pub project_id: ProjectId,
 
     /// The ID of the task to update.
-    task_id: TaskId,
+    pub task_id: TaskId,
 
     /// Update the task description.
     #[structopt(name = "description", short, long)]
     #[serde(rename = "description")]
-    maybe_description: Option<String>,
+    pub maybe_description: Option<String>,
 
     /// Update the state of the task.
     #[structopt(name = "state", short, long)]
     #[serde(rename = "state")]
-    maybe_state: Option<TaskState>,
+    pub maybe_state: Option<TaskState>,
 
     /// Update the deadline for the task.
     #[structopt(name = "deadline", long)]
     #[serde(rename = "deadline")]
-    maybe_deadline: Option<Timestamp>,
+    pub maybe_deadline: Option<Timestamp>,
 
     /// Update the task's tags.
     #[structopt(name = "tags", long)]
     #[serde(rename = "tags")]
-    maybe_tags: Option<String>,
+    pub maybe_tags: Option<String>,
 }
 
 impl UpdateTask {
@@ -136,52 +135,52 @@ impl UpdateTask {
 pub struct AddLog {
     /// The ID of the project to which to add this work log.
     #[structopt(name = "project")]
-    project_id: ProjectId,
+    pub project_id: ProjectId,
 
     /// Optionally, the ID of the task to which this work log relates.
     #[structopt(name = "task", short, long)]
     #[serde(rename = "task_id")]
-    maybe_task_id: Option<TaskId>,
+    pub maybe_task_id: Option<TaskId>,
 
     /// Optionally specify the start time for this log.
     #[structopt(name = "from", long)]
     #[serde(rename = "start")]
-    maybe_start: Option<Timestamp>,
+    pub maybe_start: Option<Timestamp>,
 
     /// Optionally specify the stop time for this log (cannot be used with
     /// duration).
     #[structopt(name = "to", long)]
     #[serde(rename = "stop")]
-    maybe_stop: Option<Timestamp>,
+    pub maybe_stop: Option<Timestamp>,
 
     /// Optionally specify the duration of this log, in seconds (cannot be
     /// used with stop time).
     #[structopt(name = "duration", short, long)]
     #[serde(rename = "duration")]
-    maybe_duration: Option<Duration>,
+    pub maybe_duration: Option<Duration>,
 
     /// An optional comment of what is/was being done in this work log.
     #[structopt(name = "comment", short, long)]
     #[serde(rename = "comment")]
-    maybe_comment: Option<String>,
+    pub maybe_comment: Option<String>,
 
     /// Tags to associate with this work log, separated by commas (e.g.
     /// "work,coding").
     #[structopt(name = "tags", long)]
     #[serde(rename = "tags")]
-    maybe_tags: Option<String>,
+    pub maybe_tags: Option<String>,
 }
 
-impl TryFrom<AddLog> for Log {
+impl TryFrom<&AddLog> for Log {
     type Error = Error;
 
-    fn try_from(cmd: AddLog) -> Result<Self, Self::Error> {
+    fn try_from(cmd: &AddLog) -> Result<Self, Self::Error> {
         Log::new(&cmd.project_id)
             .with_maybe_task_id(cmd.maybe_task_id)
             .with_maybe_start(cmd.maybe_start)
             .with_maybe_duration_or_stop(cmd.maybe_duration, cmd.maybe_stop)?
-            .with_maybe_comment(cmd.maybe_comment)
-            .with_tags(parse_tags(cmd.maybe_tags))
+            .with_maybe_comment(cmd.maybe_comment.clone())
+            .with_tags(parse_tags(cmd.maybe_tags.clone()))
     }
 }
 
@@ -190,37 +189,37 @@ impl TryFrom<AddLog> for Log {
 pub struct StartLog {
     /// The ID of the project to which to add this work log.
     #[structopt(name = "project")]
-    project_id: ProjectId,
+    pub project_id: ProjectId,
 
     /// Optionally, the ID of the task to which this work log relates.
     #[structopt(name = "task", long)]
     #[serde(rename = "task_id")]
-    maybe_task_id: Option<TaskId>,
+    pub maybe_task_id: Option<TaskId>,
 
     /// Optionally, the date/time from which to start this log. Defaults to the
     /// current local time.
     #[structopt(name = "from", short, long, default_value = "now")]
-    start: Timestamp,
+    pub start: Timestamp,
 
     /// An optional comment describing what is/was being done in this work log.
     #[structopt(name = "comment", short, long)]
-    maybe_comment: Option<String>,
+    pub maybe_comment: Option<String>,
 
     /// Tags to associate with this work log, separated by commas (e.g.
     /// "work,coding").
     #[structopt(name = "tags", long)]
-    maybe_tags: Option<String>,
+    pub maybe_tags: Option<String>,
 }
 
-impl TryFrom<StartLog> for Log {
+impl TryFrom<&StartLog> for Log {
     type Error = Error;
 
-    fn try_from(cmd: StartLog) -> Result<Self, Self::Error> {
+    fn try_from(cmd: &StartLog) -> Result<Self, Self::Error> {
         Log::new(&cmd.project_id)
             .with_maybe_task_id(cmd.maybe_task_id)
             .with_start(cmd.start)
-            .with_maybe_comment(cmd.maybe_comment)
-            .with_tags(parse_tags(cmd.maybe_tags))
+            .with_maybe_comment(cmd.maybe_comment.clone())
+            .with_tags(parse_tags(cmd.maybe_tags.clone()))
     }
 }
 
@@ -232,22 +231,22 @@ pub struct StopLog {
     /// date/time will be used.
     #[structopt(name = "at", long)]
     #[serde(rename = "stop")]
-    maybe_stop_time: Option<Timestamp>,
+    pub maybe_stop_time: Option<Timestamp>,
 
     #[structopt(name = "duration", short, long)]
     #[serde(rename = "duration")]
-    maybe_duration: Option<Duration>,
+    pub maybe_duration: Option<Duration>,
 
     /// An optional comment of what was done in this work log.
     #[structopt(name = "comment", short, long)]
     #[serde(rename = "comment")]
-    maybe_comment: Option<String>,
+    pub maybe_comment: Option<String>,
 
     /// Tags to associate with this work log, separated by commas (e.g.
     /// "work,coding").
     #[structopt(name = "tags", long)]
     #[serde(rename = "tags")]
-    maybe_tags: Option<String>,
+    pub maybe_tags: Option<String>,
 }
 
 /// List all projects.
@@ -255,14 +254,14 @@ pub struct StopLog {
 pub struct ListProjects {
     /// Show project details as opposed to just project names and IDs.
     #[structopt(short, long)]
-    detailed: bool,
+    pub detailed: bool,
 
     /// Optionally sort the projects by specific fields (e.g. "name" will sort
     /// projects in ascending order by name; "name:desc" will sort by name in
     /// descending order; "deadline,name" will first sort by deadline and then
     /// by name).
     #[structopt(short, long)]
-    sort: Option<String>,
+    pub sort: Option<String>,
 }
 
 /// List all of the tasks for a project.
@@ -270,19 +269,13 @@ pub struct ListProjects {
 pub struct ListTasks {
     /// The ID of the project whose tasks must be listed.
     #[structopt(name = "project")]
-    project_id: ProjectId,
+    pub project_id: ProjectId,
 
-    /// Show task details as opposed to just task IDs and descriptions.
+    /// Optionally sort the tasks by specific fields (e.g. "id" will sort tasks
+    /// in ascending order by ID; "id:desc" will sort by ID in descending order;
+    /// "deadline,id" will first sort by deadline and then by ID).
     #[structopt(short, long)]
-    detailed: bool,
-
-    /// Sort tasks by the given field.
-    #[structopt(short, long, default_value)]
-    sort_by: TaskField,
-
-    /// Sort order ("asc" for ascending order, or "desc" for descending order).
-    #[structopt(short, long, default_value)]
-    order: Order,
+    pub sort: Option<String>,
 }
 
 /// List all of the logs for a project or task.
@@ -290,33 +283,31 @@ pub struct ListTasks {
 pub struct ListLogs {
     /// The ID of the project whose logs must be listed.
     #[structopt(name = "project")]
-    project_id: ProjectId,
+    pub project_id: ProjectId,
 
     /// The ID of the task whose logs must be listed (if applicable).
     #[structopt(name = "task", short, long)]
-    maybe_task_id: Option<TaskId>,
+    pub maybe_task_id: Option<TaskId>,
 
     /// Show logs' details as opposed to summary.
     #[structopt(short, long)]
-    detailed: bool,
+    pub detailed: bool,
 
-    /// Sort logs by the given field.
-    #[structopt(short, long, default_value)]
-    sort_by: LogField,
-
-    /// Sort order ("asc" for ascending order, or "desc" for descending order).
-    #[structopt(short, long, default_value)]
-    order: Order,
+    /// Optionally sort the logs by specific fields (e.g. "id" will sort logs in
+    /// ascending order by ID; "id:desc" will sort by ID in descending order;
+    /// "duration,id" will first sort by duration and then by ID).
+    #[structopt(short, long)]
+    pub sort: Option<String>,
 }
 
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
 pub struct TaskStates {
     #[structopt(name = "project", short, long)]
-    maybe_project_id: Option<ProjectId>,
+    pub maybe_project_id: Option<ProjectId>,
 }
 
 /// Add a new project to the given store.
-pub fn add_project(store: &Store, params: AddProject) -> Result<Project, Error> {
+pub fn add_project(store: &Store, params: &AddProject) -> Result<Project, Error> {
     let project = Project::try_from(params)?;
     store.save_project(&project)?;
     debug!("Created new project {}", project.name());
@@ -324,7 +315,7 @@ pub fn add_project(store: &Store, params: AddProject) -> Result<Project, Error> 
 }
 
 /// Add a new task for a specific project to the store.
-pub fn add_task(store: &Store, params: AddTask) -> Result<Task, Error> {
+pub fn add_task(store: &Store, params: &AddTask) -> Result<Task, Error> {
     let task = Task::try_from(params)?;
     let task = store.save_task(&task)?;
     debug!(
@@ -336,7 +327,7 @@ pub fn add_task(store: &Store, params: AddTask) -> Result<Task, Error> {
 }
 
 /// Update one or more fields of a specific task.
-pub fn update_task(store: &Store, params: UpdateTask) -> Result<Task, Error> {
+pub fn update_task(store: &Store, params: &UpdateTask) -> Result<Task, Error> {
     let task = store.task(&params.project_id, params.task_id)?;
     let task = store.save_task(&params.apply(&task)?)?;
     debug!(
@@ -348,7 +339,7 @@ pub fn update_task(store: &Store, params: UpdateTask) -> Result<Task, Error> {
 }
 
 /// Add a new log for a project or task.
-pub fn add_log(store: &Store, params: AddLog) -> Result<Log, Error> {
+pub fn add_log(store: &Store, params: &AddLog) -> Result<Log, Error> {
     let log = Log::try_from(params)?;
     let log = store.save_log(&log)?;
     debug!(
@@ -363,11 +354,11 @@ pub fn add_log(store: &Store, params: AddLog) -> Result<Log, Error> {
 }
 
 /// Start tracking time for a new log.
-pub fn start_log(store: &Store, params: StartLog) -> Result<Log, Error> {
+pub fn start_log(store: &Store, params: &StartLog) -> Result<Log, Error> {
     let state = store.state()?;
     // Stop any active log
     if state.active_log().is_some() {
-        let _ = stop_log(store, StopLog::default())?;
+        let _ = stop_log(store, &StopLog::default())?;
     }
     let log = Log::try_from(params)?;
     let log = store.save_log(&log)?;
@@ -388,7 +379,7 @@ pub fn start_log(store: &Store, params: StartLog) -> Result<Log, Error> {
 }
 
 /// Stop tracking time for the currently active log.
-pub fn stop_log(store: &Store, params: StopLog) -> Result<Log, Error> {
+pub fn stop_log(store: &Store, params: &StopLog) -> Result<Log, Error> {
     let state = store.state()?;
     let mut active_log = match state.active_log() {
         Some((project_id, maybe_task_id, log_id)) => {
@@ -399,11 +390,11 @@ pub fn stop_log(store: &Store, params: StopLog) -> Result<Log, Error> {
     .with_duration_or_stop_or_now(params.maybe_duration, params.maybe_stop_time)?;
 
     // Optionally update the comment and tags
-    if let Some(comment) = params.maybe_comment {
+    if let Some(comment) = &params.maybe_comment {
         active_log = active_log.with_comment(comment);
     }
-    if let Some(tags) = params.maybe_tags {
-        active_log = active_log.with_tags(parse_tags(Some(tags)))?;
+    if let Some(tags) = &params.maybe_tags {
+        active_log = active_log.with_tags(parse_tags(Some(tags.clone())))?;
     }
 
     let active_log = store.save_log(&active_log)?;
@@ -424,13 +415,13 @@ pub fn stop_log(store: &Store, params: StopLog) -> Result<Log, Error> {
 }
 
 /// Cancels the active work log, if any.
-pub fn cancel_log(store: &Store) -> Result<(), Error> {
+pub fn cancel_log(store: &Store) -> Result<Option<Log>, Error> {
     let state = store.state()?;
     let active_log = match state.active_log() {
         Some((project_id, maybe_task_id, log_id)) => {
             store.log(&project_id, maybe_task_id, log_id)?
         }
-        None => return Err(Error::NoActiveLog),
+        None => return Ok(None),
     };
     store.delete_log(
         active_log.project_id().unwrap(),
@@ -448,134 +439,70 @@ pub fn cancel_log(store: &Store) -> Result<(), Error> {
             .map(|task_id| format!(", task {},", task_id))
             .unwrap_or_else(|| "".to_string()),
     );
-    Ok(())
+    Ok(Some(active_log))
 }
 
 /// List projects, optionally sorting them.
 ///
 /// Returns the rendered table containing the results.
-pub fn list_projects(store: &Store, params: ListProjects) -> Result<String, Error> {
+pub fn list_projects(store: &Store, params: &ListProjects) -> Result<Vec<Project>, Error> {
     let mut projects = store.projects()?;
-    if let Some(sort) = params.sort {
+    if let Some(sort) = &params.sort {
         let sort_spec = SortSpec::<ProjectField>::from_str(&sort)?;
         projects = sort_spec.sort(projects);
     }
-    let mut table = Table::new();
-    let header = if params.detailed {
-        vec!["ID", "Name", "Description", "Deadline", "Tags"]
-    } else {
-        vec!["ID", "Name", "Tags"]
-    };
-    table.load_preset(presets::ASCII_FULL).set_header(header);
-    for project in projects.iter() {
-        let deadline = display_optional(project.deadline());
-        let tags = project.tags().collect::<Vec<&str>>().join(", ");
-        let row = if params.detailed {
-            vec![
-                project.id(),
-                project.name(),
-                project.description().unwrap_or(""),
-                &deadline,
-                &tags,
-            ]
-        } else {
-            vec![project.id(), project.name(), &tags]
-        };
-        table.add_row(row);
-    }
-    Ok(table.to_string())
+    Ok(projects)
 }
 
 /// List tasks for a particular project, optionally sorting them.
 ///
 /// Returns the rendered table containing the results.
-pub fn list_tasks(store: &Store, params: ListTasks) -> Result<String, Error> {
-    let tasks = store.tasks(&params.project_id)?;
-    let mut table = Table::new();
-    table.load_preset(presets::ASCII_FULL).set_header(vec![
-        "ID",
-        "Project ID",
-        "State",
-        "Description",
-        "Deadline",
-        "Tags",
-    ]);
-    for task in tasks.iter() {
-        table.add_row(vec![
-            task.id().unwrap().to_string().as_str(),
-            task.project_id().unwrap(),
-            task.state().unwrap_or(""),
-            task.description(),
-            &task
-                .deadline()
-                .map(|d| d.to_string())
-                .unwrap_or_else(|| "".to_string()),
-            &task.tags().collect::<Vec<&str>>().join(", "),
-        ]);
+pub fn list_tasks(store: &Store, params: &ListTasks) -> Result<Vec<Task>, Error> {
+    let mut tasks = store.tasks(&params.project_id)?;
+    if let Some(sort) = &params.sort {
+        let sort_spec = SortSpec::<TaskField>::from_str(&sort)?;
+        tasks = sort_spec.sort(tasks);
     }
-    Ok(table.to_string())
+    Ok(tasks)
 }
 
 /// List work logs, filtered and ordered by the given parameters.
-pub fn list_logs(store: &Store, params: ListLogs) -> Result<String, Error> {
-    let logs = store.logs(&params.project_id, params.maybe_task_id)?;
-    let mut table = Table::new();
-    table
-        .load_preset(presets::ASCII_FULL)
-        .set_header(vec!["ID", "Project", "Task", "Start", "Duration", "Tags"]);
-
-    for log in logs.iter() {
-        table.add_row(vec![
-            log.id().unwrap().to_string().as_str(),
-            log.project_id().unwrap(),
-            &log.task_id()
-                .map(|i| i.to_string())
-                .unwrap_or_else(|| "".to_string()),
-            &log.start()
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "".to_string()),
-            &log.duration()
-                .map(|d| d.to_string())
-                .unwrap_or_else(|| "".to_string()),
-            &log.tags().collect::<Vec<&str>>().join(", "),
-        ]);
+pub fn list_logs(store: &Store, params: &ListLogs) -> Result<Vec<Log>, Error> {
+    let mut logs = store.logs(&params.project_id, params.maybe_task_id)?;
+    if let Some(sort) = &params.sort {
+        let sort_spec = SortSpec::<LogField>::from_str(&sort)?;
+        logs = sort_spec.sort(logs);
     }
-
-    Ok(table.to_string())
+    Ok(logs)
 }
 
-/// Shows the status of the currently active log.
-pub fn status(store: &Store) -> Result<(), Error> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogStatus {
+    pub log: Log,
+    pub active_for: Duration,
+}
+
+/// Returns the status of the currently active log.
+pub fn active_log_status(store: &Store) -> Result<Option<LogStatus>, Error> {
     let state = store.state()?;
     match state.active_log() {
         Some((project_id, maybe_task_id, log_id)) => {
-            let active_log = store.log(&project_id, maybe_task_id, log_id)?;
-            let start = active_log.start().unwrap();
-            let duration = Timestamp::now()? - start;
-            debug!(
-                "Log {} from project {}{} has been active since {} ({})",
-                active_log.id().unwrap(),
-                active_log.project_id().unwrap(),
-                active_log
-                    .task_id()
-                    .map(|task_id| format!(", task {},", task_id))
-                    .unwrap_or_else(|| "".to_string()),
-                start,
-                duration,
-            );
+            let log = store.log(&project_id, maybe_task_id, log_id)?;
+            let start = log.start().unwrap();
+            let active_for = Timestamp::now()? - start;
+            Ok(Some(LogStatus { log, active_for }))
         }
-        None => debug!("No active log"),
+        None => Ok(None),
     }
-    Ok(())
 }
 
 /// Shows a list of task states. If no project is supplied, the default
 /// configuration will be shown.
-pub fn task_states(store: &Store, params: TaskStates) -> Result<String, Error> {
+pub fn task_states(store: &Store, params: &TaskStates) -> Result<Vec<TaskState>, Error> {
     let config = store.config()?;
     let default_tsc = config.task_state_config();
-    let maybe_project = match params.maybe_project_id {
-        Some(id) => Some(store.project(&id)?),
+    let maybe_project = match &params.maybe_project_id {
+        Some(id) => Some(store.project(id)?),
         None => None,
     };
     let states = maybe_project
@@ -586,12 +513,7 @@ pub fn task_states(store: &Store, params: TaskStates) -> Result<String, Error> {
                 .map(|s| s.to_string())
                 .collect::<Vec<TaskState>>()
         });
-    let mut table = Table::new();
-    table.load_preset(presets::ASCII_FULL);
-    for state in states.iter() {
-        table.add_row(vec![state]);
-    }
-    Ok(table.to_string())
+    Ok(states)
 }
 
 fn parse_tags(maybe_tags: Option<String>) -> Vec<String> {
@@ -602,10 +524,4 @@ fn parse_tags(maybe_tags: Option<String>) -> Vec<String> {
                 .collect::<Vec<String>>()
         })
         .unwrap_or_else(Vec::new)
-}
-
-fn display_optional<S: std::fmt::Display>(maybe_value: Option<S>) -> String {
-    maybe_value
-        .map(|v| v.to_string())
-        .unwrap_or_else(|| "".to_string())
 }

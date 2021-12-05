@@ -1,3 +1,5 @@
+mod display;
+
 use std::error::Error;
 use std::{convert::Infallible, path::PathBuf, str::FromStr};
 
@@ -87,59 +89,39 @@ enum ListCommand {
 fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
     let store = Store::new(&opt.path.0)?;
     match opt.command {
-        Command::Add(sub_cmd) => add(&store, sub_cmd)?,
-        Command::Update(sub_cmd) => update(&store, sub_cmd)?,
-        Command::Start(params) => {
-            let _ = cmd::start_log(&store, params)?;
-        }
-        Command::Stop(params) => {
-            let _ = cmd::stop_log(&store, params)?;
-        }
-        Command::Cancel => cmd::cancel_log(&store)?,
-        Command::Status => cmd::status(&store)?,
-        Command::States(params) => {
-            println!("{}", cmd::task_states(&store, params)?);
-        }
-        Command::List(list_cmd) => list(&store, list_cmd)?,
+        Command::Add(sub_cmd) => add(&store, sub_cmd),
+        Command::Update(sub_cmd) => update(&store, sub_cmd),
+        Command::Start(params) => display::log_started(&cmd::start_log(&store, &params)?, &params),
+        Command::Stop(params) => display::log_stopped(&cmd::stop_log(&store, &params)?, &params),
+        Command::Cancel => display::log_cancelled(cmd::cancel_log(&store)?.as_ref()),
+        Command::Status => display::log_status(cmd::active_log_status(&store)?),
+        Command::States(params) => display::task_states(cmd::task_states(&store, &params)?),
+        Command::List(list_cmd) => list(&store, list_cmd),
     }
-    Ok(())
 }
 
 fn add(store: &Store, cmd: AddCommand) -> Result<(), Box<dyn Error>> {
     match cmd {
-        AddCommand::Project(params) => {
-            let _ = cmd::add_project(store, params)?;
-        }
-        AddCommand::Task(params) => {
-            let _ = cmd::add_task(store, params)?;
-        }
-        AddCommand::Log(params) => {
-            let _ = cmd::add_log(store, params)?;
-        }
+        AddCommand::Project(params) => display::project_added(&cmd::add_project(store, &params)?),
+        AddCommand::Task(params) => display::task_added(&cmd::add_task(store, &params)?),
+        AddCommand::Log(params) => display::log_added(&cmd::add_log(store, &params)?),
     }
-    Ok(())
 }
 
 fn update(store: &Store, cmd: UpdateCommand) -> Result<(), Box<dyn Error>> {
     match cmd {
-        UpdateCommand::Task(params) => {
-            let _ = cmd::update_task(store, params)?;
-        }
+        UpdateCommand::Task(params) => display::task_updated(&cmd::update_task(store, &params)?),
     }
-    Ok(())
 }
 
 fn list(store: &Store, cmd: ListCommand) -> Result<(), Box<dyn Error>> {
-    println!(
-        "{}",
-        match cmd {
-            ListCommand::Projects(params) => cmd::list_projects(store, params)?,
-            ListCommand::Tasks(params) => cmd::list_tasks(store, params)?,
-            ListCommand::Logs(params) => cmd::list_logs(store, params)?,
+    match cmd {
+        ListCommand::Projects(params) => {
+            display::projects(cmd::list_projects(store, &params)?, &params)
         }
-    );
-
-    Ok(())
+        ListCommand::Tasks(params) => display::tasks(cmd::list_tasks(store, &params)?),
+        ListCommand::Logs(params) => display::logs(cmd::list_logs(store, &params)?, &params),
+    }
 }
 
 fn main() {
