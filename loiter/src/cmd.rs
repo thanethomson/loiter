@@ -448,7 +448,7 @@ pub fn cancel_log(store: &Store) -> Result<Option<Log>, Error> {
 pub fn list_projects(store: &Store, params: &ListProjects) -> Result<Vec<Project>, Error> {
     let mut projects = store.projects()?;
     if let Some(sort) = &params.sort {
-        let sort_spec = SortSpec::<ProjectField>::from_str(&sort)?;
+        let sort_spec = SortSpec::<ProjectField>::from_str(sort)?;
         projects = sort_spec.sort(projects);
     }
     Ok(projects)
@@ -460,7 +460,7 @@ pub fn list_projects(store: &Store, params: &ListProjects) -> Result<Vec<Project
 pub fn list_tasks(store: &Store, params: &ListTasks) -> Result<Vec<Task>, Error> {
     let mut tasks = store.tasks(&params.project_id)?;
     if let Some(sort) = &params.sort {
-        let sort_spec = SortSpec::<TaskField>::from_str(&sort)?;
+        let sort_spec = SortSpec::<TaskField>::from_str(sort)?;
         tasks = sort_spec.sort(tasks);
     }
     Ok(tasks)
@@ -470,7 +470,7 @@ pub fn list_tasks(store: &Store, params: &ListTasks) -> Result<Vec<Task>, Error>
 pub fn list_logs(store: &Store, params: &ListLogs) -> Result<Vec<Log>, Error> {
     let mut logs = store.logs(&params.project_id, params.maybe_task_id)?;
     if let Some(sort) = &params.sort {
-        let sort_spec = SortSpec::<LogField>::from_str(&sort)?;
+        let sort_spec = SortSpec::<LogField>::from_str(sort)?;
         logs = sort_spec.sort(logs);
     }
     Ok(logs)

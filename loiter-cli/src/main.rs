@@ -91,8 +91,8 @@ fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
     match opt.command {
         Command::Add(sub_cmd) => add(&store, sub_cmd),
         Command::Update(sub_cmd) => update(&store, sub_cmd),
-        Command::Start(params) => display::log_started(&cmd::start_log(&store, &params)?, &params),
-        Command::Stop(params) => display::log_stopped(&cmd::stop_log(&store, &params)?, &params),
+        Command::Start(params) => display::log_started(&cmd::start_log(&store, &params)?),
+        Command::Stop(params) => display::log_stopped(&cmd::stop_log(&store, &params)?),
         Command::Cancel => display::log_cancelled(cmd::cancel_log(&store)?.as_ref()),
         Command::Status => display::log_status(cmd::active_log_status(&store)?),
         Command::States(params) => display::task_states(cmd::task_states(&store, &params)?),

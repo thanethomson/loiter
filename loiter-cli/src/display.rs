@@ -5,7 +5,7 @@ use std::error::Error;
 use comfy_table::{presets, Attribute, Cell, Color, Table};
 use crossterm::style::Stylize;
 use loiter::{
-    cmd::{ListLogs, ListProjects, LogStatus, StartLog, StopLog},
+    cmd::{ListLogs, ListProjects, LogStatus},
     Log, Project, Task, TaskState,
 };
 
@@ -151,31 +151,78 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) -> Result<(), Box<dyn Error>> {
 }
 
 pub fn log_added(log: &Log) -> Result<(), Box<dyn Error>> {
-    todo!()
+    println!(
+        "Log {} added for {}{}",
+        log.id().unwrap(),
+        log.project_id().unwrap().with(COLOR_PROJECT),
+        display_optional(log.task_id().map(|task_id| format!(", task {}", task_id))),
+    );
+    Ok(())
 }
 
-pub fn log_started(log: &Log, params: &StartLog) -> Result<(), Box<dyn Error>> {
-    todo!()
+pub fn log_started(log: &Log) -> Result<(), Box<dyn Error>> {
+    println!(
+        "Log {} for {}{} started at {}",
+        log.id().unwrap(),
+        log.project_id().unwrap().with(COLOR_PROJECT),
+        display_optional(log.task_id().map(|task_id| format!(", task {}", task_id))),
+        log.start().unwrap().to_string().with(COLOR_TIME),
+    );
+    Ok(())
 }
 
-pub fn log_stopped(log: &Log, params: &StopLog) -> Result<(), Box<dyn Error>> {
-    todo!()
+pub fn log_stopped(log: &Log) -> Result<(), Box<dyn Error>> {
+    println!(
+        "Log {} for {}{} stopped at {} ({})",
+        log.id().unwrap(),
+        log.project_id().unwrap().with(COLOR_PROJECT),
+        display_optional(log.task_id().map(|task_id| format!(", task {}", task_id))),
+        log.stop().unwrap().to_string().with(COLOR_TIME),
+        log.duration().unwrap().to_string().with(COLOR_TIME),
+    );
+    Ok(())
 }
 
 pub fn log_cancelled(maybe_log: Option<&Log>) -> Result<(), Box<dyn Error>> {
-    todo!()
+    match maybe_log {
+        Some(log) => {
+            println!(
+                "Log {} for {}{} cancelled",
+                log.id().unwrap(),
+                log.project_id().unwrap().with(COLOR_PROJECT),
+                display_optional(log.task_id().map(|task_id| format!(", task {}", task_id))),
+            );
+        }
+        None => println!("No active log"),
+    }
+    Ok(())
 }
 
 pub fn log_status(maybe_log_status: Option<LogStatus>) -> Result<(), Box<dyn Error>> {
-    todo!()
+    match maybe_log_status {
+        Some(status) => {
+            println!(
+                "Log {} for {}{} active since {} ({})",
+                status.log.id().unwrap(),
+                status.log.project_id().unwrap().with(COLOR_PROJECT),
+                display_optional(
+                    status
+                        .log
+                        .task_id()
+                        .map(|task_id| format!(", task {}", task_id))
+                ),
+                status.log.start().unwrap().to_string().with(COLOR_TIME),
+                status.active_for.to_string().with(COLOR_TIME),
+            );
+        }
+        None => println!("No active log"),
+    }
+    Ok(())
 }
 
 fn display_optional<D: std::fmt::Display>(v: Option<D>) -> String {
-    format!(
-        "{}",
-        v.map(|inner| inner.to_string())
-            .unwrap_or_else(|| "".to_string())
-    )
+    v.map(|inner| inner.to_string())
+        .unwrap_or_else(|| "".to_string())
 }
 
 fn join<D, I>(items: I, sep: &str) -> String
