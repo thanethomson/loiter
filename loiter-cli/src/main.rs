@@ -95,16 +95,17 @@ enum ListCommand {
 fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
     let store = Store::new(&opt.path.0)?;
     match opt.command {
-        Command::Add(sub_cmd) => add(&store, sub_cmd),
-        Command::Remove(sub_cmd) => remove(&store, sub_cmd),
-        Command::Update(sub_cmd) => update(&store, sub_cmd),
+        Command::Add(sub_cmd) => add(&store, sub_cmd)?,
+        Command::Remove(sub_cmd) => remove(&store, sub_cmd)?,
+        Command::Update(sub_cmd) => update(&store, sub_cmd)?,
         Command::Start(params) => display::log_started(&cmd::start_log(&store, &params)?),
         Command::Stop(params) => display::log_stopped(&cmd::stop_log(&store, &params)?),
         Command::Cancel => display::log_cancelled(cmd::cancel_log(&store)?.as_ref()),
         Command::Status => display::log_status(cmd::active_log_status(&store)?),
         Command::States(params) => display::task_states(cmd::task_states(&store, &params)?),
-        Command::List(list_cmd) => list(&store, list_cmd),
+        Command::List(list_cmd) => list(&store, list_cmd)?,
     }
+    Ok(())
 }
 
 fn add(store: &Store, cmd: AddCommand) -> Result<(), Box<dyn Error>> {
@@ -113,6 +114,7 @@ fn add(store: &Store, cmd: AddCommand) -> Result<(), Box<dyn Error>> {
         AddCommand::Task(params) => display::task_added(&cmd::add_task(store, &params)?),
         AddCommand::Log(params) => display::log_added(&cmd::add_log(store, &params)?),
     }
+    Ok(())
 }
 
 fn remove(store: &Store, cmd: RemoveCommand) -> Result<(), Box<dyn Error>> {
@@ -121,12 +123,14 @@ fn remove(store: &Store, cmd: RemoveCommand) -> Result<(), Box<dyn Error>> {
             display::project_removed(&cmd::remove_project(store, &params)?)
         }
     }
+    Ok(())
 }
 
 fn update(store: &Store, cmd: UpdateCommand) -> Result<(), Box<dyn Error>> {
     match cmd {
         UpdateCommand::Task(params) => display::task_updated(&cmd::update_task(store, &params)?),
     }
+    Ok(())
 }
 
 fn list(store: &Store, cmd: ListCommand) -> Result<(), Box<dyn Error>> {
@@ -137,6 +141,7 @@ fn list(store: &Store, cmd: ListCommand) -> Result<(), Box<dyn Error>> {
         ListCommand::Tasks(params) => display::tasks(cmd::list_tasks(store, &params)?),
         ListCommand::Logs(params) => display::logs(cmd::list_logs(store, &params)?, &params),
     }
+    Ok(())
 }
 
 fn main() {

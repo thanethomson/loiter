@@ -16,18 +16,17 @@ pub const COLOR_TAGS: Color = Color::Green;
 pub const COLOR_TIME: Color = Color::Cyan;
 
 /// List the given task states.
-pub fn task_states(states: Vec<TaskState>) -> Result<(), Box<dyn Error>> {
+pub fn task_states(states: Vec<TaskState>) {
     let mut table = Table::new();
     table.load_preset(presets::NOTHING);
     for state in states.iter() {
         table.add_row(vec![Cell::new(state).fg(COLOR_STATES)]);
     }
     println!("{}", table);
-    Ok(())
 }
 
 /// Render the given list of projects with the specified parameters.
-pub fn projects(projects: Vec<Project>, params: &ListProjects) -> Result<(), Box<dyn Error>> {
+pub fn projects(projects: Vec<Project>, params: &ListProjects) {
     let mut table = Table::new();
     table.load_preset(presets::NOTHING);
     if params.detailed {
@@ -53,20 +52,17 @@ pub fn projects(projects: Vec<Project>, params: &ListProjects) -> Result<(), Box
         }
     }
     println!("{}", table);
-    Ok(())
 }
 
-pub fn project_added(project: &Project) -> Result<(), Box<dyn Error>> {
+pub fn project_added(project: &Project) {
     println!("Added project with ID {}", project.id().with(COLOR_PROJECT));
-    Ok(())
 }
 
-pub fn project_removed<S: AsRef<str>>(id: S) -> Result<(), Box<dyn Error>> {
+pub fn project_removed<S: AsRef<str>>(id: S) {
     println!("Removed project {}", id.as_ref().with(COLOR_PROJECT));
-    Ok(())
 }
 
-pub fn tasks(tasks: Vec<Task>) -> Result<(), Box<dyn Error>> {
+pub fn tasks(tasks: Vec<Task>) {
     let mut table = Table::new();
     table
         .load_preset(presets::NOTHING)
@@ -89,10 +85,9 @@ pub fn tasks(tasks: Vec<Task>) -> Result<(), Box<dyn Error>> {
         ]);
     }
     println!("{}", table);
-    Ok(())
 }
 
-pub fn task_added(task: &Task) -> Result<(), Box<dyn Error>> {
+pub fn task_added(task: &Task) {
     println!(
         "Added task {} for project {}{}",
         task.id().unwrap(),
@@ -104,19 +99,17 @@ pub fn task_added(task: &Task) -> Result<(), Box<dyn Error>> {
             ))
             .unwrap_or_else(|| "".to_string())
     );
-    Ok(())
 }
 
-pub fn task_updated(task: &Task) -> Result<(), Box<dyn Error>> {
+pub fn task_updated(task: &Task) {
     println!(
         "Task {} updated for project {}",
         task.id().unwrap(),
         task.project_id().unwrap().with(COLOR_PROJECT),
     );
-    Ok(())
 }
 
-pub fn logs(logs: Vec<Log>, params: &ListLogs) -> Result<(), Box<dyn Error>> {
+pub fn logs(logs: Vec<Log>, params: &ListLogs) {
     let mut table = Table::new();
     table.load_preset(presets::NOTHING);
     if params.detailed {
@@ -130,6 +123,7 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) -> Result<(), Box<dyn Error>> {
         ]));
     }
     let mut total_duration = Duration::zero();
+    let log_count = logs.len();
     for log in logs {
         if params.detailed {
             table.add_row(vec![
@@ -154,27 +148,28 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) -> Result<(), Box<dyn Error>> {
         total_duration += log.duration().unwrap_or_else(|| Duration::zero());
     }
     println!("{}", table);
+    print!(
+        "{} {}",
+        log_count,
+        if log_count == 1 { "log" } else { "logs" }
+    );
     if total_duration > Duration::zero() {
+        println!(", {}", total_duration.to_string().with(COLOR_TIME));
+    } else {
         println!("");
-        println!(
-            "Total duration: {}",
-            total_duration.to_string().with(COLOR_TIME)
-        );
     }
-    Ok(())
 }
 
-pub fn log_added(log: &Log) -> Result<(), Box<dyn Error>> {
+pub fn log_added(log: &Log) {
     println!(
         "Log {} added for {}{}",
         log.id().unwrap(),
         log.project_id().unwrap().with(COLOR_PROJECT),
         display_optional(log.task_id().map(|task_id| format!(", task {}", task_id))),
     );
-    Ok(())
 }
 
-pub fn log_started(log: &Log) -> Result<(), Box<dyn Error>> {
+pub fn log_started(log: &Log) {
     println!(
         "Log {} for {}{} started at {}",
         log.id().unwrap(),
@@ -182,10 +177,9 @@ pub fn log_started(log: &Log) -> Result<(), Box<dyn Error>> {
         display_optional(log.task_id().map(|task_id| format!(", task {}", task_id))),
         log.start().unwrap().to_string().with(COLOR_TIME),
     );
-    Ok(())
 }
 
-pub fn log_stopped(log: &Log) -> Result<(), Box<dyn Error>> {
+pub fn log_stopped(log: &Log) {
     println!(
         "Log {} for {}{} stopped at {} ({})",
         log.id().unwrap(),
@@ -194,10 +188,9 @@ pub fn log_stopped(log: &Log) -> Result<(), Box<dyn Error>> {
         log.stop().unwrap().to_string().with(COLOR_TIME),
         log.duration().unwrap().to_string().with(COLOR_TIME),
     );
-    Ok(())
 }
 
-pub fn log_cancelled(maybe_log: Option<&Log>) -> Result<(), Box<dyn Error>> {
+pub fn log_cancelled(maybe_log: Option<&Log>) {
     match maybe_log {
         Some(log) => {
             println!(
@@ -209,10 +202,9 @@ pub fn log_cancelled(maybe_log: Option<&Log>) -> Result<(), Box<dyn Error>> {
         }
         None => println!("No active log"),
     }
-    Ok(())
 }
 
-pub fn log_status(maybe_log_status: Option<LogStatus>) -> Result<(), Box<dyn Error>> {
+pub fn log_status(maybe_log_status: Option<LogStatus>) {
     match maybe_log_status {
         Some(status) => {
             println!(
@@ -231,7 +223,6 @@ pub fn log_status(maybe_log_status: Option<LogStatus>) -> Result<(), Box<dyn Err
         }
         None => println!("No active log"),
     }
-    Ok(())
 }
 
 fn display_optional<D: std::fmt::Display>(v: Option<D>) -> String {
