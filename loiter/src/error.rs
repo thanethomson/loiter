@@ -96,4 +96,12 @@ pub enum Error {
     InvalidDurationFilterOp(String, String),
     #[error("both project and log ID are required in order to reference a specific log")]
     BothProjectAndLogIdRequired,
+    #[error("path already initialized as a Git repository: {}", .0.display())]
+    RemoteAlreadyInitialized(PathBuf),
+    #[error("remote initialization failed - see debug logs for details")]
+    RemoteInitFailed,
+    #[error("remote is not initialized for path: {}", .0.display())]
+    NotRemote(PathBuf),
+    #[error("remote push failed: {0}")]
+    RemotePushFailed(String),
 }

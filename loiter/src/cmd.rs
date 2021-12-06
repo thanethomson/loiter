@@ -1,14 +1,23 @@
 //! User-oriented functionality for interacting with Loiter stores.
 
 use crate::{
-    Duration, DurationFilter, Error, FilterSpec, Log, LogField, LogFilter, LogId, Project,
-    ProjectField, ProjectFilter, ProjectId, SortSpec, Store, Task, TaskField, TaskFilter, TaskId,
-    TaskState, Timestamp, TimestampFilter,
+    is_dir, is_file, Duration, DurationFilter, Error, FilterSpec, Log, LogField, LogFilter, LogId,
+    Project, ProjectField, ProjectFilter, ProjectId, SortSpec, Store, Task, TaskField, TaskFilter,
+    TaskId, TaskState, Timestamp, TimestampFilter,
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+    process::{Command, ExitStatus},
+    str::FromStr,
+};
 use structopt::StructOpt;
+
+const GITIGNORE: &str = r#"*.swp
+*.bak
+"#;
 
 /// Add a new project.
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
@@ -417,6 +426,20 @@ pub struct TaskStates {
     pub maybe_project_id: Option<ProjectId>,
 }
 
+/// Initialize the local storage so it can be pushed to a remote store.
+///
+/// Initializes the Loiter home directory as a Git repository and adds a remote
+/// as its origin.
+#[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
+pub struct RemoteInit {
+    /// The default branch to use when initializing the repository.
+    #[structopt(short, long, default_value = "main")]
+    pub branch: String,
+
+    /// The remote Git repository to set as origin.
+    pub origin: String,
+}
+
 /// Add a new project to the given store.
 pub fn add_project(store: &Store, params: &AddProject) -> Result<Project, Error> {
     let project = Project::try_from(params)?;
@@ -778,6 +801,113 @@ pub fn task_states(store: &Store, params: &TaskStates) -> Result<Vec<TaskState>,
                 .collect::<Vec<TaskState>>()
         });
     Ok(states)
+}
+
+/// Initialize the Loiter root path as a Git repository.
+pub fn remote_init(store: &Store, params: &RemoteInit) -> Result<PathBuf, Error> {
+    let store_path = store.path();
+    let git_path = store_path.join(".git");
+    if is_dir(&git_path) {
+        return Err(Error::RemoteAlreadyInitialized(store_path));
+    }
+    ensure_gitignore(&store_path)?;
+
+    git_init(&store_path, params.branch.as_str(), params.origin.as_str())?;
+    if git_add(&store_path)? {
+        git_commit(&store_path)?;
+    }
+    // Push and set upstream
+    git(
+        &store_path,
+        ["push", "-u", "origin", params.branch.as_str()],
+    )?;
+    Ok(store_path)
+}
+
+pub fn remote_push(store: &Store) -> Result<PathBuf, Error> {
+    let store_path = store.path();
+    let git_path = store_path.join(".git");
+    if !is_dir(&git_path) {
+        return Err(Error::NotRemote(store_path));
+    }
+    if git_add(&store_path)? {
+        git_commit(&store_path)?;
+    }
+    git_push(&store_path)?;
+    Ok(store_path)
+}
+
+pub fn remote_pull(store: &Store) -> Result<PathBuf, Error> {
+    let store_path = store.path();
+    let git_path = store_path.join(".git");
+    if !is_dir(&git_path) {
+        return Err(Error::NotRemote(store_path));
+    }
+    git_pull(&store_path)?;
+    Ok(store_path)
+}
+
+fn git_init(path: &Path, branch: &str, origin: &str) -> Result<(), Error> {
+    let _ = git(&path, ["init", "-b", branch])?;
+    let _ = git(&path, ["remote", "add", "origin", origin])?;
+    Ok(())
+}
+
+fn git_add(path: &Path) -> Result<bool, Error> {
+    let (_, stdout, _) = git(&path, ["add", "."])?;
+    Ok(!stdout.contains("nothing to commit"))
+}
+
+fn git_commit(path: &Path) -> Result<(), Error> {
+    git(&path, ["commit", "-m", "Loiter stash"])?;
+    Ok(())
+}
+
+fn git_push(path: &Path) -> Result<(), Error> {
+    git(&path, ["push", "origin"])?;
+    Ok(())
+}
+
+fn git_pull(path: &Path) -> Result<(), Error> {
+    git(&path, ["pull", "origin"])?;
+    Ok(())
+}
+
+fn git<I, S>(path: &Path, args: I) -> Result<(ExitStatus, String, String), Error>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    subprocess(Command::new("git").current_dir(path).args(args))
+}
+
+fn ensure_gitignore(path: &Path) -> Result<(), Error> {
+    let gitignore_path = path.join(".gitignore");
+    if is_file(&gitignore_path) {
+        debug!(
+            "{} already exists - not overwriting",
+            gitignore_path.display()
+        );
+        return Ok(());
+    }
+    std::fs::write(&gitignore_path, GITIGNORE)?;
+    debug!("Wrote default .gitignore to {}", gitignore_path.display());
+    Ok(())
+}
+
+fn subprocess(cmd: &mut Command) -> Result<(ExitStatus, String, String), Error> {
+    let result = cmd.output()?;
+    let stdout = match String::from_utf8(result.stdout) {
+        Ok(s) => s,
+        Err(e) => format!("Failed to convert stdout data to string: {:?}", e),
+    };
+    let stderr = match String::from_utf8(result.stderr) {
+        Ok(s) => s,
+        Err(e) => format!("Failed to convert stderr data to string: {:?}", e),
+    };
+    debug!("stdout:\n{}", stdout);
+    debug!("stderr:\n{}", stderr);
+    Ok((result.status, stdout, stderr))
 }
 
 fn parse_comma_separated(maybe_str: Option<String>) -> Vec<String> {

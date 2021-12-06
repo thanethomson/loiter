@@ -59,6 +59,11 @@ impl Store {
         })
     }
 
+    /// Get the path to the root of the Loiter store.
+    pub fn path(&self) -> PathBuf {
+        self.path.clone()
+    }
+
     fn state_path(&self) -> PathBuf {
         self.path.join("state.json")
     }
@@ -515,13 +520,13 @@ where
     Ok(fs::write(path, &s)?)
 }
 
-fn is_file<P: AsRef<Path>>(path: P) -> bool {
+pub(crate) fn is_file<P: AsRef<Path>>(path: P) -> bool {
     fs::metadata(path)
         .map(|meta| meta.is_file())
         .unwrap_or(false)
 }
 
-fn is_dir<P: AsRef<Path>>(path: P) -> bool {
+pub(crate) fn is_dir<P: AsRef<Path>>(path: P) -> bool {
     fs::metadata(path)
         .map(|meta| meta.is_dir())
         .unwrap_or(false)

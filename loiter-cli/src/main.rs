@@ -68,6 +68,8 @@ enum Command {
     List(ListCommand),
     /// Alias for "list".
     Ls(ListCommand),
+    /// Working with remote storage.
+    Remote(RemoteCommand),
 }
 
 #[derive(Debug, StructOpt)]
@@ -94,6 +96,16 @@ enum ListCommand {
     Logs(cmd::ListLogs),
 }
 
+#[derive(Debug, StructOpt)]
+enum RemoteCommand {
+    /// Initialize the remote storage.
+    Init(cmd::RemoteInit),
+    /// Commit and push any local changes to the remote storage.
+    Push,
+    /// Commit any local changes and push to the remote storage.
+    Pull,
+}
+
 fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
     let store = Store::new(&opt.path.0)?;
     match opt.command {
@@ -108,6 +120,7 @@ fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
         Command::Status => display::log_status(cmd::active_log_status(&store)?),
         Command::States(params) => display::task_states(cmd::task_states(&store, &params)?),
         Command::List(list_cmd) | Command::Ls(list_cmd) => list(&store, list_cmd)?,
+        Command::Remote(sub_cmd) => remote(&store, sub_cmd)?,
     }
     Ok(())
 }
@@ -144,6 +157,17 @@ fn list(store: &Store, cmd: ListCommand) -> Result<(), Box<dyn Error>> {
         }
         ListCommand::Tasks(params) => display::tasks(cmd::list_tasks(store, &params)?),
         ListCommand::Logs(params) => display::logs(cmd::list_logs(store, &params)?, &params),
+    }
+    Ok(())
+}
+
+fn remote(store: &Store, cmd: RemoteCommand) -> Result<(), Box<dyn Error>> {
+    match cmd {
+        RemoteCommand::Init(params) => {
+            display::remote_initialized(&cmd::remote_init(store, &params)?)
+        }
+        RemoteCommand::Push => display::remote_pushed(&cmd::remote_push(store)?),
+        RemoteCommand::Pull => display::remote_pulled(&cmd::remote_pull(store)?),
     }
     Ok(())
 }

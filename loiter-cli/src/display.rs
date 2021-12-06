@@ -1,5 +1,7 @@
 //! Utilities for displaying data via the CLI.
 
+use std::path::Path;
+
 use comfy_table::{presets, Attribute, Cell, Color, Table};
 use crossterm::style::Stylize;
 use loiter::{
@@ -221,6 +223,18 @@ pub fn log_status(maybe_log_status: Option<LogStatus>) {
         }
         None => println!("No active log"),
     }
+}
+
+pub fn remote_initialized(path: &Path) {
+    println!("{} initialized as a Git repository", path.display());
+}
+
+pub fn remote_pushed(path: &Path) {
+    println!("{} committed and pushed to remote", path.display());
+}
+
+pub fn remote_pulled(path: &Path) {
+    println!("{} pulled from remote", path.display());
 }
 
 fn display_optional<D: std::fmt::Display>(v: Option<D>) -> String {
