@@ -338,13 +338,16 @@ where
 
     /// Builder.
     pub fn and_then(mut self, filter: F) -> Self {
-        // If the default filter was used first, remove it, assuming that
-        // default filters are pass-through.
-        if self.0[0] == F::default() {
+        if self.is_passthrough() {
             self.0.clear();
         }
         self.0.push(filter);
         self
+    }
+
+    /// Returns whether this filter spec just contains a single default filter.
+    pub fn is_passthrough(&self) -> bool {
+        self.0.len() == 1 && self.0[0] == F::default()
     }
 }
 
@@ -813,10 +816,9 @@ impl Filter for TaskFilter {
                 .project_id()
                 .map(|id| id == project_id)
                 .unwrap_or(false),
-            Self::State(states) => task
-                .state()
-                .map(|task_state| states.iter().any(|state| state == task_state))
-                .unwrap_or(false),
+            Self::State(states) => states
+                .into_iter()
+                .any(|state| task.state().map(|ts| ts == state).unwrap_or(false)),
             Self::Deadline(ts_filter) => task
                 .deadline()
                 .map(|deadline| ts_filter.matches(now, deadline))
@@ -1018,8 +1020,10 @@ pub enum LogFilter {
     All,
     /// All logs belonging to the given project.
     Project(ProjectId),
-    /// All logs belonging to the given task.
-    Task(TaskId),
+    /// All logs that are associated with a task.
+    HasTask,
+    /// All logs belonging to the given task(s).
+    Task(Vec<TaskId>),
     /// All logs whose start date/time matches the given timestamp filter.
     Start(TimestampFilter),
     /// All logs whose duration matches the given duration filter.
@@ -1044,7 +1048,10 @@ impl Filter for LogFilter {
             Self::Project(project_id) => {
                 log.project_id().map(|id| id == project_id).unwrap_or(false)
             }
-            Self::Task(task_id) => log.task_id().map(|id| id == *task_id).unwrap_or(false),
+            Self::HasTask => log.task_id().is_some(),
+            Self::Task(task_ids) => task_ids
+                .into_iter()
+                .any(|task_id| log.task_id().map(|id| id == *task_id).unwrap_or(false)),
             Self::Start(ts_filter) => log
                 .start()
                 .map(|start| ts_filter.matches(now, start))

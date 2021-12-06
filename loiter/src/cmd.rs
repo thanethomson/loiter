@@ -354,6 +354,10 @@ pub struct ListLogs {
     #[structopt(name = "project-tags", long)]
     pub maybe_project_tags_filter: Option<String>,
 
+    /// Only return logs whose task IDs match one or more of these IDs.
+    #[structopt(name = "tasks", long)]
+    pub maybe_task_ids_filter: Option<String>,
+
     /// Only return logs whose task's states match one or more of these states
     /// (comma-separated).
     #[structopt(name = "task-state", long)]
@@ -643,11 +647,23 @@ pub fn list_tasks(store: &Store, params: &ListTasks) -> Result<Vec<Task>, Error>
 }
 
 fn build_log_filter(
+    task_filter: &FilterSpec<TaskFilter>,
+    maybe_task_ids: Option<String>,
     maybe_start: Option<String>,
     maybe_duration: Option<String>,
     maybe_tags: Option<String>,
 ) -> Result<FilterSpec<LogFilter>, Error> {
     let mut filter = FilterSpec::new(LogFilter::All);
+    if let Some(task_ids) = maybe_task_ids {
+        let task_ids = parse_comma_separated(Some(task_ids.clone()))
+            .into_iter()
+            .map(|task_id| TaskId::from_str(&task_id))
+            .collect::<Result<Vec<TaskId>, std::num::ParseIntError>>()
+            .map_err(|e| Error::InvalidTaskIds(task_ids, e))?;
+        filter = filter.and_then(LogFilter::Task(task_ids));
+    } else if !task_filter.is_passthrough() {
+        filter = filter.and_then(LogFilter::HasTask);
+    }
     if let Some(start) = maybe_start {
         filter = filter.and_then(LogFilter::Start(TimestampFilter::from_str(&start)?));
     }
@@ -673,6 +689,8 @@ pub fn list_logs(store: &Store, params: &ListLogs) -> Result<Vec<Log>, Error> {
         params.maybe_task_tags_filter.clone(),
     )?;
     let log_filter = build_log_filter(
+        &task_filter,
+        params.maybe_task_ids_filter.clone(),
         Some(params.start_filter.clone()),
         params.maybe_duration_filter.clone(),
         params.maybe_tags_filter.clone(),

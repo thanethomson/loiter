@@ -48,6 +48,8 @@ pub enum Error {
     DuplicateTaskStates(Vec<TaskState>),
     #[error("too few task states ({0}) - there must be at least {1}")]
     TooFewTaskStates(usize, usize),
+    #[error("invalid task ID(s) \"{0}\": {1}")]
+    InvalidTaskIds(String, std::num::ParseIntError),
     #[error("failed to parse log number from filename \"{0}\": {1}")]
     InvalidLogNumber(PathBuf, std::num::ParseIntError),
     #[error("I/O failure: {0}")]
