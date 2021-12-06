@@ -48,24 +48,22 @@ struct Opt {
 enum Command {
     /// Add a project, task or work log.
     Add(AddCommand),
+    /// Remove projects, tasks or work logs.
+    Remove(RemoveCommand),
     /// Update a project, task or work log.
     Update(UpdateCommand),
     /// Start a work log.
     Start(cmd::StartLog),
-    /// Stop the currently active work log.
+    /// Stop the currently active work log (or another specified one).
     Stop(cmd::StopLog),
-    /// Cancel the currently active work log.
-    Cancel,
+    /// Cancel the currently active work log (or another specified one).
+    Cancel(cmd::CancelLog),
     /// Show the status of the currently active work log (if any).
     Status,
     /// Show a list of valid task states.
     States(cmd::TaskStates),
-    //    Find,
     /// List projects, tasks or work logs.
     List(ListCommand),
-    /// Remove projects, tasks or work logs.
-    Remove(RemoveCommand),
-    //    Update,
 }
 
 #[derive(Debug, StructOpt)]
@@ -100,7 +98,9 @@ fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
         Command::Update(sub_cmd) => update(&store, sub_cmd)?,
         Command::Start(params) => display::log_started(&cmd::start_log(&store, &params)?),
         Command::Stop(params) => display::log_stopped(&cmd::stop_log(&store, &params)?),
-        Command::Cancel => display::log_cancelled(cmd::cancel_log(&store)?.as_ref()),
+        Command::Cancel(params) => {
+            display::log_cancelled(cmd::cancel_log(&store, &params)?.as_ref())
+        }
         Command::Status => display::log_status(cmd::active_log_status(&store)?),
         Command::States(params) => display::task_states(cmd::task_states(&store, &params)?),
         Command::List(list_cmd) => list(&store, list_cmd)?,

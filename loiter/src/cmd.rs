@@ -272,6 +272,25 @@ pub struct StopLog {
     pub maybe_tags: Option<String>,
 }
 
+/// Cancel a work log.
+///
+/// By default this cancels the currently active work log, unless a project and
+/// log ID (and possibly task ID) are provided.
+#[derive(Debug, Clone, Default, StructOpt, Serialize, Deserialize)]
+pub struct CancelLog {
+    /// For specifying a specific work log to cancel.
+    #[structopt(name = "project", short, long)]
+    pub maybe_project_id: Option<ProjectId>,
+
+    /// For specifying a specific work log to cancel.
+    #[structopt(name = "task", short, long)]
+    pub maybe_task_id: Option<TaskId>,
+
+    /// For specifying a specific work log to cancel.
+    #[structopt(name = "id", short, long)]
+    pub maybe_id: Option<LogId>,
+}
+
 /// List all projects.
 #[derive(Debug, Clone, Default, StructOpt, Serialize, Deserialize)]
 pub struct ListProjects {
@@ -538,31 +557,41 @@ pub fn stop_log(store: &Store, params: &StopLog) -> Result<Log, Error> {
 }
 
 /// Cancels the active work log, if any.
-pub fn cancel_log(store: &Store) -> Result<Option<Log>, Error> {
+pub fn cancel_log(store: &Store, params: &CancelLog) -> Result<Option<Log>, Error> {
+    let invalid_log = params.maybe_project_id.is_some() ^ params.maybe_id.is_some();
+    if invalid_log {
+        return Err(Error::BothProjectAndLogIdRequired);
+    }
     let state = store.state()?;
-    let active_log = match state.active_log() {
-        Some((project_id, maybe_task_id, log_id)) => {
-            store.log(&project_id, maybe_task_id, log_id)?
-        }
-        None => return Ok(None),
-    };
-    store.delete_log(
-        active_log.project_id().unwrap(),
-        active_log.task_id(),
-        active_log.id().unwrap(),
-    )?;
-    let state = state.with_no_active_log();
-    store.save_state(&state)?;
+    let mut selected_active_log = false;
+    let (project_id, maybe_task_id, log_id) =
+        if let Some(project_id) = params.maybe_project_id.as_ref() {
+            (
+                project_id.clone(),
+                params.maybe_task_id,
+                params.maybe_id.unwrap(),
+            )
+        } else {
+            selected_active_log = true;
+            state.active_log().ok_or(Error::NoActiveLog)?
+        };
+
+    let log = store.log(&project_id, maybe_task_id, log_id)?;
+
+    store.delete_log(log.project_id().unwrap(), log.task_id(), log.id().unwrap())?;
+    if selected_active_log {
+        let state = state.with_no_active_log();
+        store.save_state(&state)?;
+    }
     debug!(
         "Cancelled log {} for project {}{}",
-        active_log.id().unwrap(),
-        active_log.project_id().unwrap(),
-        active_log
-            .task_id()
+        log.id().unwrap(),
+        log.project_id().unwrap(),
+        log.task_id()
             .map(|task_id| format!(", task {},", task_id))
             .unwrap_or_else(|| "".to_string()),
     );
-    Ok(Some(active_log))
+    Ok(Some(log))
 }
 
 /// List projects, optionally sorting them.
