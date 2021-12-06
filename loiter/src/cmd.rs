@@ -368,9 +368,10 @@ pub struct ListLogs {
     #[structopt(name = "task-tags", long)]
     pub maybe_task_tags_filter: Option<String>,
 
-    /// Only return logs whose start time matches this filter.
-    #[structopt(name = "start", long)]
-    pub maybe_start_filter: Option<String>,
+    /// Only return logs whose start time matches this filter (defaults to all
+    /// logs from today).
+    #[structopt(name = "start", long, default_value = "today")]
+    pub start_filter: String,
 
     /// Only return logs whose duration matches this filter.
     #[structopt(name = "duration", long)]
@@ -675,7 +676,7 @@ pub fn list_logs(store: &Store, params: &ListLogs) -> Result<Vec<Log>, Error> {
         params.maybe_task_tags_filter.clone(),
     )?;
     let log_filter = build_log_filter(
-        params.maybe_start_filter.clone(),
+        Some(params.start_filter.clone()),
         params.maybe_duration_filter.clone(),
         params.maybe_tags_filter.clone(),
     )?;
