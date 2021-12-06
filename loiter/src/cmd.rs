@@ -430,8 +430,18 @@ pub fn start_log(store: &Store, params: &StartLog) -> Result<Log, Error> {
     let log = store.save_log(&log)?;
     let state = state.with_active_log(log.project_id().unwrap(), log.task_id(), log.id().unwrap());
     store.save_state(&state)?;
-    // TODO: If this is associated with a task, change the task's status to in
-    // progress.
+    if let Some(task_id) = log.task_id() {
+        let project = store.project(log.project_id().unwrap())?;
+        let task = store.task(log.project_id().unwrap(), task_id)?;
+        let config = store.config()?;
+        let task_state_config = project
+            .task_state_config()
+            .unwrap_or_else(|| config.task_state_config());
+        let task = task.with_state(task_state_config.in_progress());
+        let task = store.save_task(&task)?;
+        debug!("Updated task state for task: {:?}", task);
+    }
+
     debug!(
         "Started log {} for project {}{} at {}",
         log.id().unwrap(),
