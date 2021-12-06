@@ -612,7 +612,14 @@ fn build_task_filter(
 ) -> Result<FilterSpec<TaskFilter>, Error> {
     let mut filter = FilterSpec::new(TaskFilter::All);
     if let Some(state) = maybe_state {
-        filter = filter.and_then(TaskFilter::State(parse_comma_separated(Some(state))));
+        let states = parse_comma_separated(Some(state));
+        if states.len() == 1 && states[0].starts_with('!') {
+            filter = filter.and_then(TaskFilter::StateNot(
+                states[0].trim_start_matches('!').to_string(),
+            ));
+        } else {
+            filter = filter.and_then(TaskFilter::State(states));
+        }
     }
     if let Some(deadline) = maybe_deadline {
         filter = filter.and_then(TaskFilter::Deadline(TimestampFilter::from_str(&deadline)?));

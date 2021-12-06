@@ -793,6 +793,8 @@ pub enum TaskFilter {
     Project(ProjectId),
     /// Tasks matching the given states.
     State(Vec<TaskState>),
+    /// Tasks whose states do *not* include the given state.
+    StateNot(TaskState),
     /// Tasks whose deadline matches the given timestamp filter.
     Deadline(TimestampFilter),
     /// Tasks whose tags match one or more of the given tags.
@@ -817,8 +819,9 @@ impl Filter for TaskFilter {
                 .map(|id| id == project_id)
                 .unwrap_or(false),
             Self::State(states) => states
-                .into_iter()
+                .iter()
                 .any(|state| task.state().map(|ts| ts == state).unwrap_or(false)),
+            Self::StateNot(state) => task.state().map(|ts| ts != state).unwrap_or(true),
             Self::Deadline(ts_filter) => task
                 .deadline()
                 .map(|deadline| ts_filter.matches(now, deadline))
@@ -1050,7 +1053,7 @@ impl Filter for LogFilter {
             }
             Self::HasTask => log.task_id().is_some(),
             Self::Task(task_ids) => task_ids
-                .into_iter()
+                .iter()
                 .any(|task_id| log.task_id().map(|id| id == *task_id).unwrap_or(false)),
             Self::Start(ts_filter) => log
                 .start()

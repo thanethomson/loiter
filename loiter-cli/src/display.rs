@@ -1,7 +1,5 @@
 //! Utilities for displaying data via the CLI.
 
-use std::error::Error;
-
 use comfy_table::{presets, Attribute, Cell, Color, Table};
 use crossterm::style::Stylize;
 use loiter::{
@@ -145,7 +143,7 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) {
                 Cell::new(join(log.tags(), ",")).fg(COLOR_TAGS),
             ]);
         }
-        total_duration += log.duration().unwrap_or_else(|| Duration::zero());
+        total_duration += log.duration().unwrap_or_else(Duration::zero);
     }
     println!("{}", table);
     print!(
@@ -156,7 +154,7 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) {
     if total_duration > Duration::zero() {
         println!(", {}", total_duration.to_string().with(COLOR_TIME));
     } else {
-        println!("");
+        println!();
     }
 }
 
