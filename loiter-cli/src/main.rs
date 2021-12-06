@@ -50,6 +50,8 @@ enum Command {
     Add(AddCommand),
     /// Remove projects, tasks or work logs.
     Remove(RemoveCommand),
+    /// Alias for "remove".
+    Rm(RemoveCommand),
     /// Update a project, task or work log.
     Update(UpdateCommand),
     /// Start a work log.
@@ -64,6 +66,8 @@ enum Command {
     States(cmd::TaskStates),
     /// List projects, tasks or work logs.
     List(ListCommand),
+    /// Alias for "list".
+    Ls(ListCommand),
 }
 
 #[derive(Debug, StructOpt)]
@@ -94,7 +98,7 @@ fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
     let store = Store::new(&opt.path.0)?;
     match opt.command {
         Command::Add(sub_cmd) => add(&store, sub_cmd)?,
-        Command::Remove(sub_cmd) => remove(&store, sub_cmd)?,
+        Command::Remove(sub_cmd) | Command::Rm(sub_cmd) => remove(&store, sub_cmd)?,
         Command::Update(sub_cmd) => update(&store, sub_cmd)?,
         Command::Start(params) => display::log_started(&cmd::start_log(&store, &params)?),
         Command::Stop(params) => display::log_stopped(&cmd::stop_log(&store, &params)?),
@@ -103,7 +107,7 @@ fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
         }
         Command::Status => display::log_status(cmd::active_log_status(&store)?),
         Command::States(params) => display::task_states(cmd::task_states(&store, &params)?),
-        Command::List(list_cmd) => list(&store, list_cmd)?,
+        Command::List(list_cmd) | Command::Ls(list_cmd) => list(&store, list_cmd)?,
     }
     Ok(())
 }
