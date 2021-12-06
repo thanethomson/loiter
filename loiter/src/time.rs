@@ -273,6 +273,12 @@ fn parse_prefix_offset(ts: &str) -> Result<(time::Duration, String), Error> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Duration(time::Duration);
 
+impl Duration {
+    pub fn zero() -> Self {
+        Self(time::Duration::ZERO)
+    }
+}
+
 impl From<time::Duration> for Duration {
     fn from(d: time::Duration) -> Self {
         Self(d)
@@ -374,6 +380,20 @@ impl<'de> Deserialize<'de> for Duration {
     {
         let s = String::deserialize(deserializer)?;
         Duration::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl std::ops::Add for Duration {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
+impl std::ops::AddAssign for Duration {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0;
     }
 }
 

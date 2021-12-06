@@ -6,7 +6,7 @@ use comfy_table::{presets, Attribute, Cell, Color, Table};
 use crossterm::style::Stylize;
 use loiter::{
     cmd::{ListLogs, ListProjects, LogStatus},
-    Log, Project, Task, TaskState,
+    Duration, Log, Project, Task, TaskState,
 };
 
 pub const COLOR_STATES: Color = Color::DarkCyan;
@@ -129,6 +129,7 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) -> Result<(), Box<dyn Error>> {
             "Project", "Task", "ID", "Start", "Duration", "Tags",
         ]));
     }
+    let mut total_duration = Duration::zero();
     for log in logs {
         if params.detailed {
             table.add_row(vec![
@@ -150,8 +151,14 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) -> Result<(), Box<dyn Error>> {
                 Cell::new(join(log.tags(), ",")).fg(COLOR_TAGS),
             ]);
         }
+        total_duration += log.duration().unwrap_or_else(|| Duration::zero());
     }
     println!("{}", table);
+    println!("");
+    println!(
+        "Total duration: {}",
+        total_duration.to_string().with(COLOR_TIME)
+    );
     Ok(())
 }
 
