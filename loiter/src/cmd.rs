@@ -478,17 +478,11 @@ pub fn cancel_log(store: &Store) -> Result<Option<Log>, Error> {
 ///
 /// Returns the rendered table containing the results.
 pub fn list_projects(store: &Store, params: &ListProjects) -> Result<Vec<Project>, Error> {
-    let mut filter = FilterSpec::new(ProjectFilter::All);
-    if let Some(deadline_filter) = params.maybe_deadline_filter.as_ref() {
-        filter = filter.and_then(ProjectFilter::Deadline(TimestampFilter::from_str(
-            deadline_filter,
-        )?));
-    }
-    if let Some(tags_filter) = params.maybe_tags_filter.as_ref() {
-        filter = filter.and_then(ProjectFilter::Tags(parse_comma_separated(Some(
-            tags_filter.clone(),
-        ))));
-    }
+    let filter = build_project_filter(
+        None,
+        params.maybe_deadline_filter.clone(),
+        params.maybe_tags_filter.clone(),
+    )?;
 
     let mut projects = store.projects(&filter)?;
     if let Some(sort) = &params.sort {
@@ -498,42 +492,60 @@ pub fn list_projects(store: &Store, params: &ListProjects) -> Result<Vec<Project
     Ok(projects)
 }
 
+fn build_project_filter(
+    maybe_project_ids: Option<String>,
+    maybe_deadline: Option<String>,
+    maybe_tags: Option<String>,
+) -> Result<FilterSpec<ProjectFilter>, Error> {
+    let mut filter = FilterSpec::new(ProjectFilter::All);
+    if let Some(project_ids) = maybe_project_ids.as_ref() {
+        filter = filter.and_then(ProjectFilter::Ids(parse_comma_separated(Some(
+            project_ids.clone(),
+        ))));
+    }
+    if let Some(deadline) = maybe_deadline {
+        filter = filter.and_then(ProjectFilter::Deadline(TimestampFilter::from_str(
+            &deadline,
+        )?));
+    }
+    if let Some(tags) = maybe_tags {
+        filter = filter.and_then(ProjectFilter::Tags(parse_comma_separated(Some(tags))));
+    }
+    Ok(filter)
+}
+
+fn build_task_filter(
+    maybe_state: Option<String>,
+    maybe_deadline: Option<String>,
+    maybe_tags: Option<String>,
+) -> Result<FilterSpec<TaskFilter>, Error> {
+    let mut filter = FilterSpec::new(TaskFilter::All);
+    if let Some(state) = maybe_state {
+        filter = filter.and_then(TaskFilter::State(parse_comma_separated(Some(state))));
+    }
+    if let Some(deadline) = maybe_deadline {
+        filter = filter.and_then(TaskFilter::Deadline(TimestampFilter::from_str(&deadline)?));
+    }
+    if let Some(tags) = maybe_tags {
+        filter = filter.and_then(TaskFilter::Tags(parse_comma_separated(Some(tags))));
+    }
+    Ok(filter)
+}
+
 /// List tasks for a particular project, optionally sorting them.
 ///
 /// Returns the rendered table containing the results.
 pub fn list_tasks(store: &Store, params: &ListTasks) -> Result<Vec<Task>, Error> {
-    let mut project_filter = FilterSpec::new(ProjectFilter::All);
-    if let Some(project_ids) = params.maybe_project_ids.as_ref() {
-        project_filter = project_filter.and_then(ProjectFilter::Ids(parse_comma_separated(Some(
-            project_ids.clone(),
-        ))));
-    }
-    if let Some(project_deadline_filter) = params.maybe_project_deadline_filter.as_ref() {
-        project_filter = project_filter.and_then(ProjectFilter::Deadline(
-            TimestampFilter::from_str(project_deadline_filter)?,
-        ));
-    }
-    if let Some(project_tags_filter) = params.maybe_project_tags_filter.as_ref() {
-        project_filter = project_filter.and_then(ProjectFilter::Tags(parse_comma_separated(Some(
-            project_tags_filter.clone(),
-        ))));
-    }
-    let mut task_filter = FilterSpec::new(TaskFilter::All);
-    if let Some(state_filter) = params.maybe_state_filter.as_ref() {
-        task_filter = task_filter.and_then(TaskFilter::State(parse_comma_separated(Some(
-            state_filter.clone(),
-        ))));
-    }
-    if let Some(deadline_filter) = params.maybe_deadline_filter.as_ref() {
-        task_filter = task_filter.and_then(TaskFilter::Deadline(TimestampFilter::from_str(
-            deadline_filter,
-        )?));
-    }
-    if let Some(tags_filter) = params.maybe_tags_filter.as_ref() {
-        task_filter = task_filter.and_then(TaskFilter::Tags(parse_comma_separated(Some(
-            tags_filter.clone(),
-        ))));
-    }
+    let project_filter = build_project_filter(
+        params.maybe_project_ids.clone(),
+        params.maybe_project_deadline_filter.clone(),
+        params.maybe_project_tags_filter.clone(),
+    )?;
+    let task_filter = build_task_filter(
+        params.maybe_state_filter.clone(),
+        params.maybe_deadline_filter.clone(),
+        params.maybe_tags_filter.clone(),
+    )?;
 
     let mut tasks = store.tasks(&project_filter, &task_filter)?;
     if let Some(sort) = &params.sort {
