@@ -300,7 +300,7 @@ pub struct ListProjects {
 pub struct ListTasks {
     /// Only return tasks whose project matches these project IDs
     /// (comma-separated).
-    #[structopt(name = "project", long)]
+    #[structopt(name = "project")]
     pub maybe_project_ids: Option<String>,
 
     /// Only return tasks whose project's deadline matches this filter.
@@ -485,9 +485,7 @@ pub fn start_log(store: &Store, params: &StartLog) -> Result<Log, Error> {
 
 /// Stop tracking time for the currently active log.
 pub fn stop_log(store: &Store, params: &StopLog) -> Result<Log, Error> {
-    let invalid_log = ![params.maybe_project_id.is_some(), params.maybe_id.is_some()]
-        .into_iter()
-        .all(|b| b);
+    let invalid_log = params.maybe_project_id.is_some() ^ params.maybe_id.is_some();
     if invalid_log {
         return Err(Error::BothProjectAndLogIdRequired);
     }
