@@ -44,6 +44,13 @@ impl TryFrom<&AddProject> for Project {
     }
 }
 
+/// Remove a project and all of its related data.
+#[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
+pub struct RemoveProject {
+    /// The ID of the project to remove.
+    pub id: String,
+}
+
 /// Add a new task for a project.
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
 pub struct AddTask {
@@ -378,6 +385,13 @@ pub fn add_project(store: &Store, params: &AddProject) -> Result<Project, Error>
     store.save_project(&project)?;
     debug!("Created new project {}", project.name());
     Ok(project)
+}
+
+/// Remove a project and all of its related data from the store.
+pub fn remove_project(store: &Store, params: &RemoveProject) -> Result<ProjectId, Error> {
+    store.remove_project(&params.id)?;
+    debug!("Removed project {}", params.id);
+    Ok(params.id.clone())
 }
 
 /// Add a new task for a specific project to the store.

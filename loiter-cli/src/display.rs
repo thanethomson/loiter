@@ -61,6 +61,11 @@ pub fn project_added(project: &Project) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+pub fn project_removed<S: AsRef<str>>(id: S) -> Result<(), Box<dyn Error>> {
+    println!("Removed project {}", id.as_ref().with(COLOR_PROJECT));
+    Ok(())
+}
+
 pub fn tasks(tasks: Vec<Task>) -> Result<(), Box<dyn Error>> {
     let mut table = Table::new();
     table

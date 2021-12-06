@@ -172,6 +172,18 @@ impl Store {
         save_to_json_file(self.project_meta_path(project.id()), &project)
     }
 
+    /// Remove the project with the given ID, along with all of its data.
+    pub fn remove_project<S: AsRef<str>>(&self, id: S) -> Result<(), Error> {
+        let project_path = self.project_path(id.as_ref());
+        if is_dir(&project_path) {
+            fs::remove_dir_all(&project_path)?;
+            debug!("Removed directory: {}", project_path.display());
+            Ok(())
+        } else {
+            Err(Error::ProjectNotFound(id.as_ref().to_string()))
+        }
+    }
+
     /// Attempts to rename the given project from its old ID to the one
     /// supplied.
     pub fn rename_project<S: AsRef<str>>(&self, old_id: S, project: &Project) -> Result<(), Error> {

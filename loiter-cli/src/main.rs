@@ -63,7 +63,8 @@ enum Command {
     //    Find,
     /// List projects, tasks or work logs.
     List(ListCommand),
-    //    Remove,
+    /// Remove projects, tasks or work logs.
+    Remove(RemoveCommand),
     //    Update,
 }
 
@@ -72,6 +73,11 @@ enum AddCommand {
     Project(cmd::AddProject),
     Task(cmd::AddTask),
     Log(cmd::AddLog),
+}
+
+#[derive(Debug, StructOpt)]
+enum RemoveCommand {
+    Project(cmd::RemoveProject),
 }
 
 #[derive(Debug, StructOpt)]
@@ -90,6 +96,7 @@ fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
     let store = Store::new(&opt.path.0)?;
     match opt.command {
         Command::Add(sub_cmd) => add(&store, sub_cmd),
+        Command::Remove(sub_cmd) => remove(&store, sub_cmd),
         Command::Update(sub_cmd) => update(&store, sub_cmd),
         Command::Start(params) => display::log_started(&cmd::start_log(&store, &params)?),
         Command::Stop(params) => display::log_stopped(&cmd::stop_log(&store, &params)?),
@@ -105,6 +112,14 @@ fn add(store: &Store, cmd: AddCommand) -> Result<(), Box<dyn Error>> {
         AddCommand::Project(params) => display::project_added(&cmd::add_project(store, &params)?),
         AddCommand::Task(params) => display::task_added(&cmd::add_task(store, &params)?),
         AddCommand::Log(params) => display::log_added(&cmd::add_log(store, &params)?),
+    }
+}
+
+fn remove(store: &Store, cmd: RemoveCommand) -> Result<(), Box<dyn Error>> {
+    match cmd {
+        RemoveCommand::Project(params) => {
+            display::project_removed(&cmd::remove_project(store, &params)?)
+        }
     }
 }
 
