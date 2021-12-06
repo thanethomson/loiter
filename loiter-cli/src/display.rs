@@ -154,11 +154,13 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) -> Result<(), Box<dyn Error>> {
         total_duration += log.duration().unwrap_or_else(|| Duration::zero());
     }
     println!("{}", table);
-    println!("");
-    println!(
-        "Total duration: {}",
-        total_duration.to_string().with(COLOR_TIME)
-    );
+    if total_duration > Duration::zero() {
+        println!("");
+        println!(
+            "Total duration: {}",
+            total_duration.to_string().with(COLOR_TIME)
+        );
+    }
     Ok(())
 }
 
