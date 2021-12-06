@@ -368,8 +368,7 @@ pub struct ListLogs {
     #[structopt(name = "task-tags", long)]
     pub maybe_task_tags_filter: Option<String>,
 
-    /// Only return logs whose start time matches this filter (defaults to all
-    /// logs from today).
+    /// Only return logs whose start time matches this filter.
     #[structopt(name = "start", long, default_value = "today")]
     pub start_filter: String,
 
