@@ -16,5 +16,19 @@ At present, it primarily provides a command line-based interface for:
 - Managing tasks related to projects
 - Tracking time worked on specific tasks and/or projects
 
+## Building and Testing
+
+Note that, due to [this unsoundness
+issue](https://github.com/time-rs/time/issues/293) in the `time` crate, Loiter
+must be built with the `RUSTFLAGS="--cfg unsound_local_offset"` flag set.
+
+```bash
+# Building and installing from source
+RUSTFLAGS="--cfg unsound_local_offset" cargo install --path loiter-cli
+
+# Testing
+RUSTFLAGS="--cfg unsound_local_offset" cargo test
+```
+
 [Watson]: https://github.com/TailorDev/Watson
 
