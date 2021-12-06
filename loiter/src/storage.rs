@@ -33,8 +33,8 @@ use serde::Serialize;
 
 use crate::strings::slugify;
 use crate::{
-    Config, Error, Filter, FilterSpec, Log, LogId, Project, ProjectFilter, State, Task, TaskFilter,
-    TaskId, Timestamp,
+    Config, Error, Filter, FilterSpec, Log, LogFilter, LogId, Project, ProjectFilter, State, Task,
+    TaskFilter, TaskId, Timestamp,
 };
 
 const STARTING_TASK_ID: TaskId = 1;
@@ -324,7 +324,7 @@ impl Store {
 
     fn next_log_id(&self, project_id: &str, maybe_task_id: Option<TaskId>) -> Result<LogId, Error> {
         Ok(self
-            .logs(project_id, maybe_task_id)?
+            .logs_for_project_or_task(project_id, maybe_task_id, &FilterSpec::new(LogFilter::All))?
             .into_iter()
             .map(|log| log.id().unwrap())
             .max()
@@ -332,9 +332,52 @@ impl Store {
             .unwrap_or(STARTING_LOG_ID))
     }
 
+    /// Return all logs matching the given filter criteria.
+    pub fn logs(
+        &self,
+        project_filter: &FilterSpec<ProjectFilter>,
+        task_filter: &FilterSpec<TaskFilter>,
+        log_filter: &FilterSpec<LogFilter>,
+    ) -> Result<Vec<Log>, Error> {
+        let projects = self.projects(project_filter)?;
+        let tasks = self.tasks(project_filter, task_filter)?;
+        let mut logs = projects
+            .into_iter()
+            .map(|project| self.logs_for_project_or_task(project.id(), None, log_filter))
+            .collect::<Result<Vec<Vec<Log>>, Error>>()?
+            .into_iter()
+            .fold(Vec::new(), |mut acc, mut logs| {
+                acc.append(&mut logs);
+                acc
+            });
+        let mut task_logs = tasks
+            .into_iter()
+            .map(|task| {
+                self.logs_for_project_or_task(
+                    task.project_id().unwrap(),
+                    Some(task.id().unwrap()),
+                    log_filter,
+                )
+            })
+            .collect::<Result<Vec<Vec<Log>>, Error>>()?
+            .into_iter()
+            .fold(Vec::new(), |mut acc, mut logs| {
+                acc.append(&mut logs);
+                acc
+            });
+        logs.append(&mut task_logs);
+        Ok(logs)
+    }
+
     /// Get all of the logs associated with the given project, and optionally
     /// with the given task.
-    pub fn logs(&self, project_id: &str, maybe_task_id: Option<TaskId>) -> Result<Vec<Log>, Error> {
+    pub fn logs_for_project_or_task(
+        &self,
+        project_id: &str,
+        maybe_task_id: Option<TaskId>,
+        filter: &FilterSpec<LogFilter>,
+    ) -> Result<Vec<Log>, Error> {
+        let now = Timestamp::now()?;
         let logs_path = self.logs_path(project_id, maybe_task_id);
         if !is_dir(&logs_path) {
             return Ok(Vec::new());
@@ -349,7 +392,16 @@ impl Store {
                             Ok(log_id) => log_id,
                             Err(_) => return None,
                         };
-                        return Some(self.log(project_id, maybe_task_id, log_id));
+                        return match self.log(project_id, maybe_task_id, log_id) {
+                            Ok(log) => {
+                                if filter.matches(&log, now) {
+                                    Some(Ok(log))
+                                } else {
+                                    None
+                                }
+                            }
+                            Err(e) => Some(Err(e)),
+                        };
                     }
                 }
                 None

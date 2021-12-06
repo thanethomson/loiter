@@ -88,4 +88,8 @@ pub enum Error {
     InvalidTimestampFilter(String),
     #[error("failed to parse timestamp filter: {0}")]
     TimestampFilterParsingFailed(String),
+    #[error("invalid duration filter: \"{0}\"")]
+    InvalidDurationFilter(String),
+    #[error("invalid duration filter operator \"{0}\" in filter: \"{1}\"")]
+    InvalidDurationFilterOp(String, String),
 }

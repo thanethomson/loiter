@@ -128,7 +128,7 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) -> Result<(), Box<dyn Error>> {
         if params.detailed {
             table.add_row(vec![
                 Cell::new(log.project_id().unwrap()).fg(COLOR_PROJECT),
-                Cell::new(log.task_id().unwrap()),
+                Cell::new(display_optional(log.task_id())),
                 Cell::new(log.id().unwrap()),
                 Cell::new(display_optional(log.start())).fg(COLOR_TIME),
                 Cell::new(display_optional(log.duration())).fg(COLOR_TIME),
@@ -138,7 +138,7 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) -> Result<(), Box<dyn Error>> {
         } else {
             table.add_row(vec![
                 Cell::new(log.project_id().unwrap()).fg(COLOR_PROJECT),
-                Cell::new(log.task_id().unwrap()),
+                Cell::new(display_optional(log.task_id())),
                 Cell::new(log.id().unwrap()),
                 Cell::new(display_optional(log.start())).fg(COLOR_TIME),
                 Cell::new(display_optional(log.duration())).fg(COLOR_TIME),

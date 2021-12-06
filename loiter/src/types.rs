@@ -508,7 +508,7 @@ impl FromStr for TimestampFilter {
 }
 
 /// A filter for durations.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub enum DurationFilter {
     LessThan(Duration),
     LessThanOrEqual(Duration),
@@ -526,6 +526,32 @@ impl DurationFilter {
             Self::GreaterThanOrEqual(d) => duration >= *d,
             Self::Equal(d) => duration == *d,
         }
+    }
+}
+
+impl FromStr for DurationFilter {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+        // Find where the first digit starts
+        let first_digit_idx = s
+            .find(|c: char| c.is_ascii_digit())
+            .ok_or_else(|| Error::InvalidDurationFilter(s.to_string()))?;
+        let duration = Duration::from_str(&s[first_digit_idx..])?;
+        Ok(match s[..first_digit_idx].trim() {
+            "<=" => DurationFilter::LessThanOrEqual(duration),
+            "<" => DurationFilter::LessThan(duration),
+            ">=" => DurationFilter::GreaterThanOrEqual(duration),
+            ">" => DurationFilter::GreaterThan(duration),
+            "" | "=" | "==" => DurationFilter::Equal(duration),
+            op => {
+                return Err(Error::InvalidDurationFilterOp(
+                    op.to_string(),
+                    s.to_string(),
+                ))
+            }
+        })
     }
 }
 
@@ -1243,7 +1269,9 @@ fn validate_tag<S: AsRef<str>>(tag: S) -> Result<String, Error> {
 
 #[cfg(test)]
 mod test {
-    use super::{Order, ProjectField, SortSpec, Timestamp, TimestampFilter};
+    use super::{
+        Duration, DurationFilter, Order, ProjectField, SortSpec, Timestamp, TimestampFilter,
+    };
     use lazy_static::lazy_static;
     use std::str::FromStr;
     use time::macros::datetime;
@@ -1276,6 +1304,11 @@ mod test {
             ("tomorrow", TimestampFilter::Tomorrow),
             ("tmrw", TimestampFilter::Tomorrow),
         ];
+        static ref DURATION_FILTER_PARSING_TEST_CASES: Vec<(&'static str, DurationFilter)> =
+            vec![(
+                "< 1h",
+                DurationFilter::LessThan(Duration::from(time::Duration::HOUR))
+            ),];
     }
 
     #[test]
@@ -1298,6 +1331,14 @@ mod test {
     fn timestamp_filter_parsing() {
         for (s, expected) in TIMESTAMP_FILTER_PARSING_TEST_CASES.iter() {
             let actual = TimestampFilter::parse(s, *TEST_NOW).unwrap();
+            assert_eq!(actual, *expected);
+        }
+    }
+
+    #[test]
+    fn duration_filter_parsing() {
+        for (s, expected) in DURATION_FILTER_PARSING_TEST_CASES.iter() {
+            let actual = DurationFilter::from_str(s).unwrap();
             assert_eq!(actual, *expected);
         }
     }

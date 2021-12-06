@@ -1,8 +1,9 @@
 //! User-oriented functionality for interacting with Loiter stores.
 
 use crate::{
-    Duration, Error, FilterSpec, Log, LogField, Project, ProjectField, ProjectFilter, ProjectId,
-    SortSpec, Store, Task, TaskField, TaskFilter, TaskId, TaskState, Timestamp, TimestampFilter,
+    Duration, DurationFilter, Error, FilterSpec, Log, LogField, LogFilter, Project, ProjectField,
+    ProjectFilter, ProjectId, SortSpec, Store, Task, TaskField, TaskFilter, TaskId, TaskState,
+    Timestamp, TimestampFilter,
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -313,17 +314,50 @@ pub struct ListTasks {
 /// List all of the logs for a project or task.
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
 pub struct ListLogs {
-    /// The ID of the project whose logs must be listed.
-    #[structopt(name = "project")]
-    pub project_id: ProjectId,
-
-    /// The ID of the task whose logs must be listed (if applicable).
-    #[structopt(name = "task", short, long)]
-    pub maybe_task_id: Option<TaskId>,
-
-    /// Show logs' details as opposed to summary.
+    /// Show detailed logs (including comments).
     #[structopt(short, long)]
     pub detailed: bool,
+
+    /// Only return logs whose project matches these project IDs
+    /// (comma-separated).
+    #[structopt(name = "project", long)]
+    pub maybe_project_ids: Option<String>,
+
+    /// Only return logs whose project's deadline matches this filter.
+    #[structopt(name = "project-deadline", long)]
+    pub maybe_project_deadline_filter: Option<String>,
+
+    /// Only return logs whose project's tags match one or more of these tags
+    /// (comma-separated).
+    #[structopt(name = "project-tags", long)]
+    pub maybe_project_tags_filter: Option<String>,
+
+    /// Only return logs whose task's states match one or more of these states
+    /// (comma-separated).
+    #[structopt(name = "task-state", long)]
+    pub maybe_task_state_filter: Option<String>,
+
+    /// Only return logs whose task's deadline matches the given filter.
+    #[structopt(name = "task-deadline", long)]
+    pub maybe_task_deadline_filter: Option<String>,
+
+    /// Only return logs whose task's tags match one or more of these states
+    /// (comma-separated).
+    #[structopt(name = "task-tags", long)]
+    pub maybe_task_tags_filter: Option<String>,
+
+    /// Only return logs whose start time matches this filter.
+    #[structopt(name = "start", long)]
+    pub maybe_start_filter: Option<String>,
+
+    /// Only return logs whose duration matches this filter.
+    #[structopt(name = "duration", long)]
+    pub maybe_duration_filter: Option<String>,
+
+    /// Only return logs whose tags match one or more of these tags
+    /// (comma-separated).
+    #[structopt(name = "tags", long)]
+    pub maybe_tags_filter: Option<String>,
 
     /// Optionally sort the logs by specific fields (e.g. "id" will sort logs in
     /// ascending order by ID; "id:desc" will sort by ID in descending order;
@@ -555,9 +589,43 @@ pub fn list_tasks(store: &Store, params: &ListTasks) -> Result<Vec<Task>, Error>
     Ok(tasks)
 }
 
+fn build_log_filter(
+    maybe_start: Option<String>,
+    maybe_duration: Option<String>,
+    maybe_tags: Option<String>,
+) -> Result<FilterSpec<LogFilter>, Error> {
+    let mut filter = FilterSpec::new(LogFilter::All);
+    if let Some(start) = maybe_start {
+        filter = filter.and_then(LogFilter::Start(TimestampFilter::from_str(&start)?));
+    }
+    if let Some(duration) = maybe_duration {
+        filter = filter.and_then(LogFilter::Duration(DurationFilter::from_str(&duration)?));
+    }
+    if let Some(tags) = maybe_tags {
+        filter = filter.and_then(LogFilter::Tags(parse_comma_separated(Some(tags))));
+    }
+    Ok(filter)
+}
+
 /// List work logs, filtered and ordered by the given parameters.
 pub fn list_logs(store: &Store, params: &ListLogs) -> Result<Vec<Log>, Error> {
-    let mut logs = store.logs(&params.project_id, params.maybe_task_id)?;
+    let project_filter = build_project_filter(
+        params.maybe_project_ids.clone(),
+        params.maybe_project_deadline_filter.clone(),
+        params.maybe_project_tags_filter.clone(),
+    )?;
+    let task_filter = build_task_filter(
+        params.maybe_task_state_filter.clone(),
+        params.maybe_task_deadline_filter.clone(),
+        params.maybe_task_tags_filter.clone(),
+    )?;
+    let log_filter = build_log_filter(
+        params.maybe_start_filter.clone(),
+        params.maybe_duration_filter.clone(),
+        params.maybe_tags_filter.clone(),
+    )?;
+
+    let mut logs = store.logs(&project_filter, &task_filter, &log_filter)?;
     if let Some(sort) = &params.sort {
         let sort_spec = SortSpec::<LogField>::from_str(sort)?;
         logs = sort_spec.sort(logs);
