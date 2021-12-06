@@ -1,8 +1,8 @@
 //! User-oriented functionality for interacting with Loiter stores.
 
 use crate::{
-    Duration, Error, Log, LogField, Project, ProjectField, ProjectId, SortSpec, Store, Task,
-    TaskField, TaskId, TaskState, Timestamp,
+    Duration, Error, FilterSpec, Log, LogField, Project, ProjectField, ProjectFilter, ProjectId,
+    SortSpec, Store, Task, TaskField, TaskId, TaskState, Timestamp, TimestampFilter,
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -256,6 +256,14 @@ pub struct ListProjects {
     #[structopt(short, long)]
     pub detailed: bool,
 
+    /// Only return projects matching this deadline filter.
+    #[structopt(name = "deadline", long)]
+    pub maybe_deadline_filter: Option<String>,
+
+    /// Only return projects matching one or more of these tags.
+    #[structopt(name = "tags", long)]
+    pub maybe_tags_filter: Option<String>,
+
     /// Optionally sort the projects by specific fields (e.g. "name" will sort
     /// projects in ascending order by name; "name:desc" will sort by name in
     /// descending order; "deadline,name" will first sort by deadline and then
@@ -446,7 +454,17 @@ pub fn cancel_log(store: &Store) -> Result<Option<Log>, Error> {
 ///
 /// Returns the rendered table containing the results.
 pub fn list_projects(store: &Store, params: &ListProjects) -> Result<Vec<Project>, Error> {
-    let mut projects = store.projects()?;
+    let mut filter = FilterSpec::new(ProjectFilter::All);
+    if let Some(deadline_filter) = params.maybe_deadline_filter.as_ref() {
+        filter = filter.and_then(ProjectFilter::Deadline(TimestampFilter::from_str(
+            deadline_filter,
+        )?));
+    }
+    if let Some(tags_filter) = params.maybe_tags_filter.as_ref() {
+        filter = filter.and_then(ProjectFilter::Tags(parse_tags(Some(tags_filter.clone()))));
+    }
+
+    let mut projects = store.projects(&filter)?;
     if let Some(sort) = &params.sort {
         let sort_spec = SortSpec::<ProjectField>::from_str(sort)?;
         projects = sort_spec.sort(projects);

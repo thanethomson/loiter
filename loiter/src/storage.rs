@@ -32,7 +32,10 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::strings::slugify;
-use crate::{Config, Error, Log, LogId, Project, State, Task, TaskId};
+use crate::{
+    Config, Error, Filter, FilterSpec, Log, LogId, Project, ProjectFilter, State, Task, TaskId,
+    Timestamp,
+};
 
 const STARTING_TASK_ID: TaskId = 1;
 const STARTING_LOG_ID: LogId = 1;
@@ -112,7 +115,9 @@ impl Store {
     }
 
     /// Get a list of all of the projects in the store.
-    pub fn projects(&self) -> Result<Vec<Project>, Error> {
+    pub fn projects(&self, filter_spec: &FilterSpec<ProjectFilter>) -> Result<Vec<Project>, Error> {
+        debug!("Attempting to filter projects by spec: {:?}", filter_spec);
+        let now = Timestamp::now()?;
         let projects = fs::read_dir(&self.path)?
             .into_iter()
             .filter_map(|r| {
@@ -124,7 +129,24 @@ impl Store {
                         // We're only interested in this folder if it contains a
                         // project metadata file.
                         if is_file(project_meta_path) {
-                            return Some(self.project(project_id));
+                            // Filter out any projects we don't want
+                            // immediately to avoid unnecessarily loading them.
+                            let maybe_project_result = match self.project(project_id) {
+                                Ok(project) => {
+                                    if filter_spec.matches(&project, now) {
+                                        debug!("Project matches filter spec: {:?}", project);
+                                        Some(Ok(project))
+                                    } else {
+                                        debug!(
+                                            "Project does not match filter spec, skipping: {:?}",
+                                            project
+                                        );
+                                        None
+                                    }
+                                }
+                                Err(e) => Some(Err(e)),
+                            };
+                            return maybe_project_result;
                         }
                     }
                 }
@@ -173,6 +195,21 @@ impl Store {
 
     fn tasks_path(&self, project_id: &str) -> PathBuf {
         self.project_path(project_id).join("tasks")
+    }
+
+    /// Returns all tasks across all projects.
+    pub fn all_tasks(&self) -> Result<Vec<Task>, Error> {
+        let projects = self.projects(&FilterSpec::new(ProjectFilter::default()))?;
+        let tasks = projects
+            .into_iter()
+            .map(|project| self.tasks(project.id()))
+            .collect::<Result<Vec<Vec<Task>>, Error>>()?
+            .into_iter()
+            .fold(Vec::new(), |mut acc, mut v| {
+                acc.append(&mut v);
+                acc
+            });
+        Ok(tasks)
     }
 
     /// Get all of the tasks for the project with the specified ID.

@@ -84,4 +84,8 @@ pub enum Error {
     SortSpecHasEmptyComponent(String),
     #[error("sort specification \"{0}\" has too many parts in \"{1}\" (only a single colon is allowed for each field)")]
     TooManyComponentsInSortSpec(String, String),
+    #[error("invalid timestamp filter: \"{0}\"")]
+    InvalidTimestampFilter(String),
+    #[error("failed to parse timestamp filter: {0}")]
+    TimestampFilterParsingFailed(String),
 }

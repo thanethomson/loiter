@@ -35,6 +35,12 @@ const DEFAULT_TIMESTAMP_FORMAT: &str =
 pub struct Timestamp(#[serde(with = "timestamp_s18n")] OffsetDateTime);
 
 impl Timestamp {
+    /// Attempt to parse the given string as a timestamp, using `now` as a
+    /// reference for the current time.
+    pub fn parse(s: &str, now: Self) -> Result<Self, Error> {
+        Ok(Self(parse_timestamp(s, &now.0)?))
+    }
+
     /// Return the current date/time.
     ///
     /// Attempts to obtain time zone information from the system. Returns an
@@ -46,6 +52,16 @@ impl Timestamp {
     /// Return the timestamp of the beginning of the day today.
     pub fn today(&self) -> Self {
         Self(self.0.replace_time(time!(00:00)))
+    }
+
+    /// Timestamp as at the beginning of tomorrow.
+    pub fn tomorrow(&self) -> Self {
+        Self(self.today().0 + time::Duration::DAY)
+    }
+
+    /// Timestamp as at the beginning of yesterday.
+    pub fn yesterday(&self) -> Self {
+        Self(self.today().0 - time::Duration::DAY)
     }
 
     /// Return the timestamp of the beginning of the day on Monday of this week.
@@ -60,10 +76,21 @@ impl Timestamp {
         Self(monday)
     }
 
+    /// Timestamp 1 week from the beginning of this week.
+    pub fn next_week(&self) -> Self {
+        Self(self.this_week().0 + time::Duration::DAY.checked_mul(7).unwrap())
+    }
+
     /// Return the timestamp of the beginning of the day of the given number of
     /// days back in time.
     pub fn days_back(&self, days: u16) -> Self {
         Self(self.today().0 - time::Duration::DAY.checked_mul(days.into()).unwrap())
+    }
+
+    /// Timestamp at the beginning of the day of the given number of days
+    /// forward in time.
+    pub fn days_forward(&self, days: u16) -> Self {
+        Self(self.today().0 + time::Duration::DAY.checked_mul(days.into()).unwrap())
     }
 
     /// Return the timestamp of the beginning of the day on the first day of
@@ -73,11 +100,30 @@ impl Timestamp {
         Self(today.replace_date(Date::from_calendar_date(today.year(), today.month(), 1).unwrap()))
     }
 
+    /// Timestamp as at the beginning of the day on the first day of next month.
+    pub fn next_month(&self) -> Self {
+        let next_month = self.this_month().0 + (32 * time::Duration::DAY);
+        Self(next_month.replace_date(
+            Date::from_calendar_date(next_month.year(), next_month.month(), 1).unwrap(),
+        ))
+    }
+
     /// Return the timestamp of the beginning of the day on the first of January
     /// of this year.
     pub fn this_year(&self) -> Self {
         let today = self.today().0;
         Self(today.replace_date(Date::from_calendar_date(today.year(), Month::January, 1).unwrap()))
+    }
+
+    /// Timestamp as at the beginning of the day on the first of January of next
+    /// year.
+    pub fn next_year(&self) -> Self {
+        let next_year = self.this_year().0 + (366 * time::Duration::DAY);
+        Self(
+            next_year.replace_date(
+                Date::from_calendar_date(next_year.year(), Month::January, 1).unwrap(),
+            ),
+        )
     }
 }
 

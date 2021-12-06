@@ -311,6 +311,51 @@ impl std::fmt::Display for Order {
     }
 }
 
+/// A filter for specific types of objects.
+pub trait Filter {
+    type Type;
+
+    /// Returns whether or not the given item matches this filter.
+    ///
+    /// Time needs to be supplied to facilitate testing.
+    fn matches(&self, item: &Self::Type, now: Timestamp) -> bool;
+}
+
+/// A specification as to how to filter a list of objects.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FilterSpec<F>(Vec<F>);
+
+impl<F> FilterSpec<F>
+where
+    F: Filter + Default + PartialEq,
+{
+    /// Constructor.
+    ///
+    /// A filter specification contains at least one filter.
+    pub fn new(filter: F) -> Self {
+        Self(vec![filter])
+    }
+
+    /// Builder.
+    pub fn and_then(mut self, filter: F) -> Self {
+        // If the default filter was used first, remove it, assuming that
+        // default filters are pass-through.
+        if self.0[0] == F::default() {
+            self.0.clear();
+        }
+        self.0.push(filter);
+        self
+    }
+}
+
+impl<F: Filter> Filter for FilterSpec<F> {
+    type Type = F::Type;
+
+    fn matches(&self, item: &Self::Type, now: Timestamp) -> bool {
+        !self.0.iter().any(|filter| !filter.matches(item, now))
+    }
+}
+
 /// The fields on which project listings can be sorted.
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq)]
 pub enum ProjectField {
@@ -379,6 +424,10 @@ impl std::fmt::Display for ProjectField {
 pub enum TimestampFilter {
     /// All entries today.
     Today,
+    /// All entries tomorrow.
+    Tomorrow,
+    /// All entries yesterday.
+    Yesterday,
     /// All entries this week (starting on a Monday).
     ThisWeek,
     /// All entries within the last given number of days.
@@ -394,18 +443,67 @@ pub enum TimestampFilter {
 }
 
 impl TimestampFilter {
+    /// Attempt to parse the given string as a timestamp filter, using the given
+    /// `now` as a reference.
+    pub fn parse(s: &str, now: Timestamp) -> Result<Self, Error> {
+        Ok(match s.trim().to_lowercase().as_str() {
+            "today" => Self::Today,
+            "tomorrow" | "tmrw" => Self::Tomorrow,
+            "yesterday" | "yst" => Self::Yesterday,
+            "week" | "this-week" => Self::ThisWeek,
+            "month" | "this-month" => Self::ThisMonth,
+            "year" | "this-year" => Self::ThisYear,
+            filter => Self::try_parse_complex(filter, now)?,
+        })
+    }
+
     /// Given the current `now` value, does the specified timestamp `ts` match
     /// according to the timestamp filter?
     pub fn matches(&self, now: Timestamp, ts: Timestamp) -> bool {
         match self {
-            Self::Today => ts >= now.today(),
-            Self::ThisWeek => ts >= now.this_week(),
-            Self::Days(days) => ts >= now.days_back(*days),
-            Self::ThisMonth => ts >= now.this_month(),
-            Self::ThisYear => ts >= now.this_year(),
+            Self::Today => ts >= now.today() && ts < now.tomorrow(),
+            Self::Tomorrow => ts >= now.tomorrow() && ts < now.days_forward(2),
+            Self::Yesterday => ts >= now.yesterday() && ts < now.today(),
+            Self::ThisWeek => ts >= now.this_week() && ts < now.next_week(),
+            Self::Days(days) => ts >= now.days_back(*days) && ts < now,
+            Self::ThisMonth => ts >= now.this_month() && ts < now.next_month(),
+            Self::ThisYear => ts >= now.this_year() && ts < now.next_year(),
             Self::Starting(starting) => ts >= *starting,
             Self::Before(before) => ts < *before,
         }
+    }
+
+    // Try to parse a complex timestamp filter.
+    fn try_parse_complex(s: &str, now: Timestamp) -> Result<Self, Error> {
+        let parts = s.split(' ').map(|p| p.trim()).collect::<Vec<&str>>();
+        if parts.len() < 2 {
+            return Err(Error::InvalidTimestampFilter(s.to_string()));
+        }
+        if parts[1] == "days" {
+            let days = parts[0]
+                .parse::<u16>()
+                .map_err(|e| Error::TimestampFilterParsingFailed(e.to_string()))?;
+            return Ok(Self::Days(days));
+        }
+        match parts[0] {
+            "from" | "starting" | "start" => Ok(Self::Starting(Timestamp::parse(
+                &parts[1..].join(" "),
+                now,
+            )?)),
+            "to" | "before" | "ending" => {
+                Ok(Self::Before(Timestamp::parse(&parts[1..].join(" "), now)?))
+            }
+            _ => Err(Error::InvalidTimestampFilter(s.to_string())),
+        }
+    }
+}
+
+impl FromStr for TimestampFilter {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let now = Timestamp::now()?;
+        Self::parse(s, now)
     }
 }
 
@@ -434,6 +532,8 @@ impl DurationFilter {
 /// For filtering projects by the contents of specific fields.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub enum ProjectFilter {
+    /// Include all projects.
+    All,
     /// Include all projects whose deadline is present and matches the given
     /// timestamp filter.
     Deadline(TimestampFilter),
@@ -441,10 +541,19 @@ pub enum ProjectFilter {
     Tags(Vec<String>),
 }
 
-impl ProjectFilter {
+impl Default for ProjectFilter {
+    fn default() -> Self {
+        Self::All
+    }
+}
+
+impl Filter for ProjectFilter {
+    type Type = Project;
+
     /// Returns whether the given project matches this filter.
-    pub fn matches(&self, project: &Project, now: Timestamp) -> bool {
+    fn matches(&self, project: &Project, now: Timestamp) -> bool {
         match self {
+            Self::All => true,
             Self::Deadline(ts_filter) => project
                 .deadline()
                 .map(|deadline| ts_filter.matches(now, deadline))
@@ -644,6 +753,8 @@ impl std::fmt::Display for TaskField {
 /// For filtering tasks by the contents of specific fields.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub enum TaskFilter {
+    /// All tasks.
+    All,
     /// Tasks belonging to the given project.
     Project(ProjectId),
     /// Tasks matching the given state.
@@ -654,10 +765,19 @@ pub enum TaskFilter {
     Tags(Vec<String>),
 }
 
-impl TaskFilter {
+impl Default for TaskFilter {
+    fn default() -> Self {
+        Self::All
+    }
+}
+
+impl Filter for TaskFilter {
+    type Type = Task;
+
     /// Returns whether the given task matches this filter.
-    pub fn matches(&self, task: &Task, now: Timestamp) -> bool {
+    fn matches(&self, task: &Task, now: Timestamp) -> bool {
         match self {
+            Self::All => true,
             Self::Project(project_id) => task
                 .project_id()
                 .map(|id| id == project_id)
@@ -860,17 +980,33 @@ impl std::fmt::Display for LogField {
 /// For filtering work logs by the contents of specific fields.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub enum LogFilter {
+    /// All logs.
+    All,
+    /// All logs belonging to the given project.
     Project(ProjectId),
+    /// All logs belonging to the given task.
     Task(TaskId),
+    /// All logs whose start date/time matches the given timestamp filter.
     Start(TimestampFilter),
+    /// All logs whose duration matches the given duration filter.
     Duration(DurationFilter),
+    /// All logs whose tags match one or more of the given tags.
     Tags(Vec<String>),
 }
 
-impl LogFilter {
+impl Default for LogFilter {
+    fn default() -> Self {
+        Self::All
+    }
+}
+
+impl Filter for LogFilter {
+    type Type = Log;
+
     /// Returns whether the given work log matches this filter.
-    pub fn matches(&self, log: &Log, now: Timestamp) -> bool {
+    fn matches(&self, log: &Log, now: Timestamp) -> bool {
         match self {
+            Self::All => true,
             Self::Project(project_id) => {
                 log.project_id().map(|id| id == project_id).unwrap_or(false)
             }
@@ -1099,11 +1235,13 @@ fn validate_tag<S: AsRef<str>>(tag: S) -> Result<String, Error> {
 
 #[cfg(test)]
 mod test {
-    use super::{Order, ProjectField, SortSpec};
+    use super::{Order, ProjectField, SortSpec, Timestamp, TimestampFilter};
     use lazy_static::lazy_static;
     use std::str::FromStr;
+    use time::macros::datetime;
 
     lazy_static! {
+        static ref TEST_NOW: Timestamp = Timestamp::from(datetime!(2021-12-05 19:42 -05:00));
         static ref SORT_SPEC_PARSING_TEST_CASES: Vec<(&'static str, SortSpec<ProjectField>)> = vec![
             ("id", SortSpec::new(ProjectField::Id, Order::Asc)),
             (
@@ -1125,6 +1263,11 @@ mod test {
                 "name:desc,id"
             ),
         ];
+        static ref TIMESTAMP_FILTER_PARSING_TEST_CASES: Vec<(&'static str, TimestampFilter)> = vec![
+            ("today", TimestampFilter::Today),
+            ("tomorrow", TimestampFilter::Tomorrow),
+            ("tmrw", TimestampFilter::Tomorrow),
+        ];
     }
 
     #[test]
@@ -1140,6 +1283,14 @@ mod test {
         for (s, expected) in SORT_SPEC_DISPLAY_TEST_CASES.iter() {
             let actual = s.to_string();
             assert_eq!(&actual, expected);
+        }
+    }
+
+    #[test]
+    fn timestamp_filter_parsing() {
+        for (s, expected) in TIMESTAMP_FILTER_PARSING_TEST_CASES.iter() {
+            let actual = TimestampFilter::parse(s, *TEST_NOW).unwrap();
+            assert_eq!(actual, *expected);
         }
     }
 }
