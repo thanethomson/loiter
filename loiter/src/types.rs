@@ -534,6 +534,8 @@ impl DurationFilter {
 pub enum ProjectFilter {
     /// Include all projects.
     All,
+    /// Projects whose IDs match these IDs.
+    Ids(Vec<ProjectId>),
     /// Include all projects whose deadline is present and matches the given
     /// timestamp filter.
     Deadline(TimestampFilter),
@@ -554,6 +556,9 @@ impl Filter for ProjectFilter {
     fn matches(&self, project: &Project, now: Timestamp) -> bool {
         match self {
             Self::All => true,
+            Self::Ids(project_ids) => project_ids
+                .iter()
+                .any(|project_id| project_id == project.id()),
             Self::Deadline(ts_filter) => project
                 .deadline()
                 .map(|deadline| ts_filter.matches(now, deadline))
@@ -757,8 +762,8 @@ pub enum TaskFilter {
     All,
     /// Tasks belonging to the given project.
     Project(ProjectId),
-    /// Tasks matching the given state.
-    State(TaskState),
+    /// Tasks matching the given states.
+    State(Vec<TaskState>),
     /// Tasks whose deadline matches the given timestamp filter.
     Deadline(TimestampFilter),
     /// Tasks whose tags match one or more of the given tags.
@@ -782,7 +787,10 @@ impl Filter for TaskFilter {
                 .project_id()
                 .map(|id| id == project_id)
                 .unwrap_or(false),
-            Self::State(state) => task.state().map(|s| s == state).unwrap_or(false),
+            Self::State(states) => task
+                .state()
+                .map(|task_state| states.iter().any(|state| state == task_state))
+                .unwrap_or(false),
             Self::Deadline(ts_filter) => task
                 .deadline()
                 .map(|deadline| ts_filter.matches(now, deadline))

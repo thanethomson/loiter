@@ -33,8 +33,8 @@ use serde::Serialize;
 
 use crate::strings::slugify;
 use crate::{
-    Config, Error, Filter, FilterSpec, Log, LogId, Project, ProjectFilter, State, Task, TaskId,
-    Timestamp,
+    Config, Error, Filter, FilterSpec, Log, LogId, Project, ProjectFilter, State, Task, TaskFilter,
+    TaskId, Timestamp,
 };
 
 const STARTING_TASK_ID: TaskId = 1;
@@ -131,7 +131,7 @@ impl Store {
                         if is_file(project_meta_path) {
                             // Filter out any projects we don't want
                             // immediately to avoid unnecessarily loading them.
-                            let maybe_project_result = match self.project(project_id) {
+                            return match self.project(project_id) {
                                 Ok(project) => {
                                     if filter_spec.matches(&project, now) {
                                         debug!("Project matches filter spec: {:?}", project);
@@ -146,7 +146,6 @@ impl Store {
                                 }
                                 Err(e) => Some(Err(e)),
                             };
-                            return maybe_project_result;
                         }
                     }
                 }
@@ -198,11 +197,15 @@ impl Store {
     }
 
     /// Returns all tasks across all projects.
-    pub fn all_tasks(&self) -> Result<Vec<Task>, Error> {
-        let projects = self.projects(&FilterSpec::new(ProjectFilter::default()))?;
+    pub fn tasks(
+        &self,
+        project_filter: &FilterSpec<ProjectFilter>,
+        task_filter: &FilterSpec<TaskFilter>,
+    ) -> Result<Vec<Task>, Error> {
+        let projects = self.projects(project_filter)?;
         let tasks = projects
             .into_iter()
-            .map(|project| self.tasks(project.id()))
+            .map(|project| self.project_tasks(project.id(), task_filter))
             .collect::<Result<Vec<Vec<Task>>, Error>>()?
             .into_iter()
             .fold(Vec::new(), |mut acc, mut v| {
@@ -213,7 +216,12 @@ impl Store {
     }
 
     /// Get all of the tasks for the project with the specified ID.
-    pub fn tasks(&self, project_id: &str) -> Result<Vec<Task>, Error> {
+    pub fn project_tasks(
+        &self,
+        project_id: &str,
+        task_filter: &FilterSpec<TaskFilter>,
+    ) -> Result<Vec<Task>, Error> {
+        let now = Timestamp::now()?;
         let tasks_path = self.tasks_path(project_id);
         if !is_dir(&tasks_path) {
             return Ok(Vec::new());
@@ -228,7 +236,18 @@ impl Store {
                             Ok(task_id) => task_id,
                             Err(_) => return None,
                         };
-                        return Some(self.task(project_id, task_id));
+                        return match self.task(project_id, task_id) {
+                            Ok(task) => {
+                                if task_filter.matches(&task, now) {
+                                    debug!("Task matches filter spec: {:?}", task);
+                                    Some(Ok(task))
+                                } else {
+                                    debug!("Task does not match filter spec: {:?}", task);
+                                    None
+                                }
+                            }
+                            Err(e) => Some(Err(e)),
+                        };
                     }
                 }
                 None
@@ -259,7 +278,7 @@ impl Store {
 
     fn next_task_id(&self, project_id: &str) -> Result<TaskId, Error> {
         Ok(self
-            .tasks(project_id)?
+            .project_tasks(project_id, &FilterSpec::new(TaskFilter::All))?
             .into_iter()
             .map(|task| task.id().unwrap())
             .max()

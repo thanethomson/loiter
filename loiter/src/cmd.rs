@@ -2,7 +2,7 @@
 
 use crate::{
     Duration, Error, FilterSpec, Log, LogField, Project, ProjectField, ProjectFilter, ProjectId,
-    SortSpec, Store, Task, TaskField, TaskId, TaskState, Timestamp, TimestampFilter,
+    SortSpec, Store, Task, TaskField, TaskFilter, TaskId, TaskState, Timestamp, TimestampFilter,
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -39,7 +39,7 @@ impl TryFrom<&AddProject> for Project {
         Project::new(&cmd.name)
             .with_maybe_description(cmd.maybe_description.clone())
             .with_maybe_deadline(cmd.maybe_deadline)
-            .with_tags(parse_tags(cmd.maybe_tags.clone()))
+            .with_tags(parse_comma_separated(cmd.maybe_tags.clone()))
     }
 }
 
@@ -76,7 +76,7 @@ impl TryFrom<&AddTask> for Task {
         Task::new(&cmd.project_id, &cmd.description)
             .with_maybe_state(cmd.maybe_state.clone())
             .with_maybe_deadline(cmd.maybe_deadline)
-            .with_tags(parse_tags(cmd.maybe_tags.clone()))
+            .with_tags(parse_comma_separated(cmd.maybe_tags.clone()))
     }
 }
 
@@ -124,7 +124,7 @@ impl UpdateTask {
             task = task.with_deadline(*deadline);
         }
         if let Some(tags) = &self.maybe_tags {
-            task = task.with_tags(parse_tags(Some(tags.clone())))?;
+            task = task.with_tags(parse_comma_separated(Some(tags.clone())))?;
         }
         Ok(task)
     }
@@ -180,7 +180,7 @@ impl TryFrom<&AddLog> for Log {
             .with_maybe_start(cmd.maybe_start)
             .with_maybe_duration_or_stop(cmd.maybe_duration, cmd.maybe_stop)?
             .with_maybe_comment(cmd.maybe_comment.clone())
-            .with_tags(parse_tags(cmd.maybe_tags.clone()))
+            .with_tags(parse_comma_separated(cmd.maybe_tags.clone()))
     }
 }
 
@@ -219,7 +219,7 @@ impl TryFrom<&StartLog> for Log {
             .with_maybe_task_id(cmd.maybe_task_id)
             .with_start(cmd.start)
             .with_maybe_comment(cmd.maybe_comment.clone())
-            .with_tags(parse_tags(cmd.maybe_tags.clone()))
+            .with_tags(parse_comma_separated(cmd.maybe_tags.clone()))
     }
 }
 
@@ -275,9 +275,29 @@ pub struct ListProjects {
 /// List all of the tasks for a project.
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
 pub struct ListTasks {
-    /// The ID of the project whose tasks must be listed.
-    #[structopt(name = "project")]
-    pub project_id: ProjectId,
+    /// Only return tasks whose project matches these project IDs
+    /// (comma-separated).
+    #[structopt(name = "project", long)]
+    pub maybe_project_ids: Option<String>,
+
+    /// Only return tasks whose project's deadline matches this filter.
+    #[structopt(name = "project-deadline", long)]
+    pub maybe_project_deadline_filter: Option<String>,
+
+    /// Only return tasks whose project's tags match one or more of these tags
+    /// (comma-separated).
+    #[structopt(name = "project-tags", long)]
+    pub maybe_project_tags_filter: Option<String>,
+
+    /// Only return tasks whose states match one or more of these states
+    /// (comma-separated).
+    #[structopt(name = "state", long)]
+    pub maybe_state_filter: Option<String>,
+
+    /// Only return tasks whose tags match one or more of these states
+    /// (comma-separated).
+    #[structopt(name = "tags", long)]
+    pub maybe_tags_filter: Option<String>,
 
     /// Optionally sort the tasks by specific fields (e.g. "id" will sort tasks
     /// in ascending order by ID; "id:desc" will sort by ID in descending order;
@@ -402,7 +422,7 @@ pub fn stop_log(store: &Store, params: &StopLog) -> Result<Log, Error> {
         active_log = active_log.with_comment(comment);
     }
     if let Some(tags) = &params.maybe_tags {
-        active_log = active_log.with_tags(parse_tags(Some(tags.clone())))?;
+        active_log = active_log.with_tags(parse_comma_separated(Some(tags.clone())))?;
     }
 
     let active_log = store.save_log(&active_log)?;
@@ -461,7 +481,9 @@ pub fn list_projects(store: &Store, params: &ListProjects) -> Result<Vec<Project
         )?));
     }
     if let Some(tags_filter) = params.maybe_tags_filter.as_ref() {
-        filter = filter.and_then(ProjectFilter::Tags(parse_tags(Some(tags_filter.clone()))));
+        filter = filter.and_then(ProjectFilter::Tags(parse_comma_separated(Some(
+            tags_filter.clone(),
+        ))));
     }
 
     let mut projects = store.projects(&filter)?;
@@ -476,7 +498,35 @@ pub fn list_projects(store: &Store, params: &ListProjects) -> Result<Vec<Project
 ///
 /// Returns the rendered table containing the results.
 pub fn list_tasks(store: &Store, params: &ListTasks) -> Result<Vec<Task>, Error> {
-    let mut tasks = store.tasks(&params.project_id)?;
+    let mut project_filter = FilterSpec::new(ProjectFilter::All);
+    if let Some(project_ids) = params.maybe_project_ids.as_ref() {
+        project_filter = project_filter.and_then(ProjectFilter::Ids(parse_comma_separated(Some(
+            project_ids.clone(),
+        ))));
+    }
+    if let Some(project_deadline_filter) = params.maybe_project_deadline_filter.as_ref() {
+        project_filter = project_filter.and_then(ProjectFilter::Deadline(
+            TimestampFilter::from_str(project_deadline_filter)?,
+        ));
+    }
+    if let Some(project_tags_filter) = params.maybe_project_tags_filter.as_ref() {
+        project_filter = project_filter.and_then(ProjectFilter::Tags(parse_comma_separated(Some(
+            project_tags_filter.clone(),
+        ))));
+    }
+    let mut task_filter = FilterSpec::new(TaskFilter::All);
+    if let Some(state_filter) = params.maybe_state_filter.as_ref() {
+        task_filter = task_filter.and_then(TaskFilter::State(parse_comma_separated(Some(
+            state_filter.clone(),
+        ))));
+    }
+    if let Some(tags_filter) = params.maybe_tags_filter.as_ref() {
+        task_filter = task_filter.and_then(TaskFilter::Tags(parse_comma_separated(Some(
+            tags_filter.clone(),
+        ))));
+    }
+
+    let mut tasks = store.tasks(&project_filter, &task_filter)?;
     if let Some(sort) = &params.sort {
         let sort_spec = SortSpec::<TaskField>::from_str(sort)?;
         tasks = sort_spec.sort(tasks);
@@ -534,10 +584,10 @@ pub fn task_states(store: &Store, params: &TaskStates) -> Result<Vec<TaskState>,
     Ok(states)
 }
 
-fn parse_tags(maybe_tags: Option<String>) -> Vec<String> {
-    maybe_tags
-        .map(|tags| {
-            tags.split(',')
+fn parse_comma_separated(maybe_str: Option<String>) -> Vec<String> {
+    maybe_str
+        .map(|s| {
+            s.split(',')
                 .map(|s| s.trim().to_string())
                 .collect::<Vec<String>>()
         })
