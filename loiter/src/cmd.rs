@@ -1,9 +1,9 @@
 //! User-oriented functionality for interacting with Loiter stores.
 
 use crate::{
-    Duration, DurationFilter, Error, FilterSpec, Log, LogField, LogFilter, Project, ProjectField,
-    ProjectFilter, ProjectId, SortSpec, Store, Task, TaskField, TaskFilter, TaskId, TaskState,
-    Timestamp, TimestampFilter,
+    Duration, DurationFilter, Error, FilterSpec, Log, LogField, LogFilter, LogId, Project,
+    ProjectField, ProjectFilter, ProjectId, SortSpec, Store, Task, TaskField, TaskFilter, TaskId,
+    TaskState, Timestamp, TimestampFilter,
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -231,9 +231,24 @@ impl TryFrom<&StartLog> for Log {
     }
 }
 
-/// Stop the currently active work log.
+/// Stop a work log.
+///
+/// By default this stops the currently active work log, unless a project and
+/// log ID (and possibly task ID) are provided.
 #[derive(Debug, Clone, Default, StructOpt, Serialize, Deserialize)]
 pub struct StopLog {
+    /// For specifying a specific work log to stop.
+    #[structopt(name = "project", short, long)]
+    pub maybe_project_id: Option<ProjectId>,
+
+    /// For specifying a specific work log to stop.
+    #[structopt(name = "task", short, long)]
+    pub maybe_task_id: Option<TaskId>,
+
+    /// For specifying a specific work log to stop.
+    #[structopt(name = "id", short, long)]
+    pub maybe_id: Option<LogId>,
+
     /// Optionally specify the time at which the current work log should be
     /// stopped. If not given, and no duration is given, the current
     /// date/time will be used.
@@ -470,38 +485,54 @@ pub fn start_log(store: &Store, params: &StartLog) -> Result<Log, Error> {
 
 /// Stop tracking time for the currently active log.
 pub fn stop_log(store: &Store, params: &StopLog) -> Result<Log, Error> {
-    let state = store.state()?;
-    let mut active_log = match state.active_log() {
-        Some((project_id, maybe_task_id, log_id)) => {
-            store.log(&project_id, maybe_task_id, log_id)?
-        }
-        None => return Err(Error::NoActiveLog),
+    let invalid_log = ![params.maybe_project_id.is_some(), params.maybe_id.is_some()]
+        .into_iter()
+        .all(|b| b);
+    if invalid_log {
+        return Err(Error::BothProjectAndLogIdRequired);
     }
-    .with_duration_or_stop_or_now(params.maybe_duration, params.maybe_stop_time)?;
+    let state = store.state()?;
+    let mut selected_active_log = false;
+    let (project_id, maybe_task_id, log_id) =
+        if let Some(project_id) = params.maybe_project_id.as_ref() {
+            (
+                project_id.clone(),
+                params.maybe_task_id,
+                params.maybe_id.unwrap(),
+            )
+        } else {
+            selected_active_log = true;
+            state.active_log().ok_or(Error::NoActiveLog)?
+        };
+
+    let mut log = store
+        .log(&project_id, maybe_task_id, log_id)?
+        .with_duration_or_stop_or_now(params.maybe_duration, params.maybe_stop_time)?;
 
     // Optionally update the comment and tags
     if let Some(comment) = &params.maybe_comment {
-        active_log = active_log.with_comment(comment);
+        log = log.with_comment(comment);
     }
     if let Some(tags) = &params.maybe_tags {
-        active_log = active_log.with_tags(parse_comma_separated(Some(tags.clone())))?;
+        log = log.with_tags(parse_comma_separated(Some(tags.clone())))?;
     }
 
-    let active_log = store.save_log(&active_log)?;
-    let state = state.with_no_active_log();
-    store.save_state(&state)?;
+    let log = store.save_log(&log)?;
+    if selected_active_log {
+        let state = state.with_no_active_log();
+        store.save_state(&state)?;
+    }
     debug!(
         "Stopped log {} for project {}{} at {} ({})",
-        active_log.id().unwrap(),
-        active_log.project_id().unwrap(),
-        active_log
-            .task_id()
+        log.id().unwrap(),
+        log.project_id().unwrap(),
+        log.task_id()
             .map(|task_id| format!(", task {},", task_id))
             .unwrap_or_else(|| "".to_string()),
-        active_log.stop().unwrap(),
-        active_log.duration().unwrap(),
+        log.stop().unwrap(),
+        log.duration().unwrap(),
     );
-    Ok(active_log)
+    Ok(log)
 }
 
 /// Cancels the active work log, if any.

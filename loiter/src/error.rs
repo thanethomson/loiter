@@ -92,4 +92,6 @@ pub enum Error {
     InvalidDurationFilter(String),
     #[error("invalid duration filter operator \"{0}\" in filter: \"{1}\"")]
     InvalidDurationFilterOp(String, String),
+    #[error("both project and log ID are required in order to reference a specific log")]
+    BothProjectAndLogIdRequired,
 }
