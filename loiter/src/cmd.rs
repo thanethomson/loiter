@@ -294,6 +294,10 @@ pub struct ListTasks {
     #[structopt(name = "state", long)]
     pub maybe_state_filter: Option<String>,
 
+    /// Only return tasks whose deadline matches the given filter.
+    #[structopt(name = "deadline", long)]
+    pub maybe_deadline_filter: Option<String>,
+
     /// Only return tasks whose tags match one or more of these states
     /// (comma-separated).
     #[structopt(name = "tags", long)]
@@ -519,6 +523,11 @@ pub fn list_tasks(store: &Store, params: &ListTasks) -> Result<Vec<Task>, Error>
         task_filter = task_filter.and_then(TaskFilter::State(parse_comma_separated(Some(
             state_filter.clone(),
         ))));
+    }
+    if let Some(deadline_filter) = params.maybe_deadline_filter.as_ref() {
+        task_filter = task_filter.and_then(TaskFilter::Deadline(TimestampFilter::from_str(
+            deadline_filter,
+        )?));
     }
     if let Some(tags_filter) = params.maybe_tags_filter.as_ref() {
         task_filter = task_filter.and_then(TaskFilter::Tags(parse_comma_separated(Some(
