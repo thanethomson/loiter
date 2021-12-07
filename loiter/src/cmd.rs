@@ -752,7 +752,7 @@ pub fn list_logs(store: &Store, params: &ListLogs) -> Result<Vec<Log>, Error> {
         params.maybe_tags_filter.clone(),
     )?;
 
-    let mut logs = store.logs(&project_filter, &task_filter, &log_filter)?;
+    let mut logs = store.logs(&project_filter, &task_filter, &log_filter, params.detailed)?;
     let sort_spec = SortSpec::<LogField>::from_str(&params.sort)?;
     logs = sort_spec.sort(logs);
     Ok(logs)

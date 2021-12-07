@@ -341,7 +341,13 @@ impl Store {
 
     fn next_log_id(&self, project_id: &str, maybe_task_id: Option<TaskId>) -> Result<LogId, Error> {
         Ok(self
-            .logs_for_project_or_task(project_id, maybe_task_id, &FilterSpec::new(LogFilter::All))?
+            .logs_for_project_or_task(
+                project_id,
+                maybe_task_id,
+                &FilterSpec::new(LogFilter::All),
+                false,
+                None,
+            )?
             .into_iter()
             .map(|log| log.id().unwrap())
             .max()
@@ -355,12 +361,15 @@ impl Store {
         project_filter: &FilterSpec<ProjectFilter>,
         task_filter: &FilterSpec<TaskFilter>,
         log_filter: &FilterSpec<LogFilter>,
+        detailed: bool,
     ) -> Result<Vec<Log>, Error> {
         let projects = self.projects(project_filter)?;
         let tasks = self.tasks(project_filter, task_filter)?;
         let mut logs = projects
             .into_iter()
-            .map(|project| self.logs_for_project_or_task(project.id(), None, log_filter))
+            .map(|project| {
+                self.logs_for_project_or_task(project.id(), None, log_filter, detailed, None)
+            })
             .collect::<Result<Vec<Vec<Log>>, Error>>()?
             .into_iter()
             .fold(Vec::new(), |mut acc, mut logs| {
@@ -374,6 +383,8 @@ impl Store {
                     task.project_id().unwrap(),
                     Some(task.id().unwrap()),
                     log_filter,
+                    detailed,
+                    Some(task.clone()),
                 )
             })
             .collect::<Result<Vec<Vec<Log>>, Error>>()?
@@ -393,6 +404,8 @@ impl Store {
         project_id: &str,
         maybe_task_id: Option<TaskId>,
         filter: &FilterSpec<LogFilter>,
+        detailed: bool,
+        maybe_task: Option<Task>,
     ) -> Result<Vec<Log>, Error> {
         let now = Timestamp::now()?;
         let logs_path = self.logs_path(project_id, maybe_task_id);
@@ -412,7 +425,11 @@ impl Store {
                         return match self.log(project_id, maybe_task_id, log_id) {
                             Ok(log) => {
                                 if filter.matches(&log, now) {
-                                    Some(Ok(log))
+                                    Some(Ok(if detailed {
+                                        log.with_maybe_task(maybe_task.clone())
+                                    } else {
+                                        log
+                                    }))
                                 } else {
                                     None
                                 }

@@ -113,11 +113,19 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) {
     let mut table = Table::new();
     table.load_preset(presets::NOTHING);
     if params.detailed {
-        table.set_header(header_cells(vec![
-            "Project", "Task", "ID", "Start", "Duration", "Comment", "Tags",
-        ]));
+        table
+            .set_header(header_cells(vec![
+                "Project",
+                "Task",
+                "ID",
+                "Start",
+                "Duration",
+                "Comment",
+                "Tags",
+                "Task Description",
+            ]))
+            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
     } else {
-        // Same as above, but without the duration.
         table.set_header(header_cells(vec![
             "Project", "Task", "ID", "Start", "Duration", "Tags",
         ]));
@@ -134,6 +142,7 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) {
                 Cell::new(display_optional(log.duration())).fg(COLOR_TIME),
                 Cell::new(display_optional(log.comment())),
                 Cell::new(join(log.tags(), ",")).fg(COLOR_TAGS),
+                Cell::new(display_optional(log.task().map(|task| task.description()))),
             ]);
         } else {
             table.add_row(vec![

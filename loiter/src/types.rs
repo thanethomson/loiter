@@ -1093,6 +1093,10 @@ pub struct Log {
     #[serde(rename = "comment")]
     maybe_comment: Option<String>,
     tags: HashSet<String>,
+    // Allows us to optionally load the task associated with this log for
+    // detailed information on the log.
+    #[serde(skip)]
+    maybe_task: Option<Task>,
 }
 
 impl Log {
@@ -1106,6 +1110,7 @@ impl Log {
             maybe_duration: None,
             maybe_comment: None,
             tags: HashSet::new(),
+            maybe_task: None,
         }
     }
 
@@ -1224,6 +1229,12 @@ impl Log {
         Ok(self)
     }
 
+    pub fn with_maybe_task(mut self, maybe_task: Option<Task>) -> Self {
+        self.maybe_task_id = maybe_task.as_ref().map(|task| task.id()).flatten();
+        self.maybe_task = maybe_task;
+        self
+    }
+
     pub fn project_id(&self) -> Option<&str> {
         self.maybe_project_id.as_deref()
     }
@@ -1260,6 +1271,10 @@ impl Log {
 
     pub fn tags(&self) -> impl Iterator<Item = &str> {
         self.tags.iter().map(|t| t.as_str())
+    }
+
+    pub fn task(&self) -> Option<&Task> {
+        self.maybe_task.as_ref()
     }
 }
 
