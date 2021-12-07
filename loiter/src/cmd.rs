@@ -848,28 +848,28 @@ pub fn remote_pull(store: &Store) -> Result<PathBuf, Error> {
 }
 
 fn git_init(path: &Path, branch: &str, origin: &str) -> Result<(), Error> {
-    let _ = git(&path, ["init", "-b", branch])?;
-    let _ = git(&path, ["remote", "add", "origin", origin])?;
+    let _ = git(path, ["init", "-b", branch])?;
+    let _ = git(path, ["remote", "add", "origin", origin])?;
     Ok(())
 }
 
 fn git_add(path: &Path) -> Result<bool, Error> {
-    let (_, stdout, _) = git(&path, ["add", "."])?;
+    let (_, stdout, _) = git(path, ["add", "."])?;
     Ok(!stdout.contains("nothing to commit"))
 }
 
 fn git_commit(path: &Path) -> Result<(), Error> {
-    git(&path, ["commit", "-m", "Loiter stash"])?;
+    git(path, ["commit", "-m", "Loiter stash"])?;
     Ok(())
 }
 
 fn git_push(path: &Path) -> Result<(), Error> {
-    git(&path, ["push", "origin"])?;
+    git(path, ["push", "origin"])?;
     Ok(())
 }
 
 fn git_pull(path: &Path) -> Result<(), Error> {
-    git(&path, ["pull", "origin"])?;
+    git(path, ["pull", "origin"])?;
     Ok(())
 }
 
