@@ -135,7 +135,7 @@ pub fn tasks_updated(tasks: Vec<Task>) {
     let task_count = tasks.len();
     for task in tasks {
         println!(
-            "Task {} {} updated for project {}",
+            "Task {} \"{}\" updated for project {}",
             task.id().unwrap(),
             task.description().attribute(Attribute::Bold),
             task.project_id().unwrap().with(COLOR_PROJECT),
@@ -262,7 +262,7 @@ pub fn log_status(maybe_log_status: Option<LogStatus>) {
     match maybe_log_status {
         Some(status) => {
             println!(
-                "Log {} for {}{} active since {} ({})",
+                "Log {} for {}{}{} active since {} ({})",
                 status.log.id().unwrap(),
                 status.log.project_id().unwrap().with(COLOR_PROJECT),
                 display_optional(
@@ -271,6 +271,12 @@ pub fn log_status(maybe_log_status: Option<LogStatus>) {
                         .task_id()
                         .map(|task_id| format!(", task {}", task_id))
                 ),
+                display_optional(
+                    status
+                        .maybe_task_description
+                        .map(|desc| format!(" \"{}\"", desc))
+                )
+                .attribute(Attribute::Bold),
                 status.log.start().unwrap().to_string().with(COLOR_TIME),
                 status.active_for.to_string().with(COLOR_TIME),
             );

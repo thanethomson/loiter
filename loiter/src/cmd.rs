@@ -802,6 +802,7 @@ pub fn list_logs(store: &Store, params: &ListLogs) -> Result<Vec<Log>, Error> {
 pub struct LogStatus {
     pub log: Log,
     pub active_for: Duration,
+    pub maybe_task_description: Option<String>,
 }
 
 /// Returns the status of the currently active log.
@@ -812,7 +813,15 @@ pub fn active_log_status(store: &Store) -> Result<Option<LogStatus>, Error> {
             let log = store.log(&project_id, maybe_task_id, log_id)?;
             let start = log.start().unwrap();
             let active_for = Timestamp::now()? - start;
-            Ok(Some(LogStatus { log, active_for }))
+            let maybe_task_description = match maybe_task_id {
+                Some(task_id) => Some(store.task(&project_id, task_id)?.description().to_string()),
+                None => None,
+            };
+            Ok(Some(LogStatus {
+                log,
+                active_for,
+                maybe_task_description,
+            }))
         }
         None => Ok(None),
     }
