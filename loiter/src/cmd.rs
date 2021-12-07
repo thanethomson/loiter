@@ -365,14 +365,18 @@ pub struct ListTasks {
 /// List all of the logs for a project or task.
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
 pub struct ListLogs {
+    /// Only return logs whose project matches these project IDs
+    /// (comma-separated).
+    #[structopt(name = "projects")]
+    pub maybe_project_ids: Option<String>,
+
+    /// Only return logs whose task IDs match one or more of these IDs.
+    #[structopt(name = "tasks")]
+    pub maybe_task_ids_filter: Option<String>,
+
     /// Show detailed logs (including comments).
     #[structopt(short, long)]
     pub detailed: bool,
-
-    /// Only return logs whose project matches these project IDs
-    /// (comma-separated).
-    #[structopt(name = "project", long)]
-    pub maybe_project_ids: Option<String>,
 
     /// Only return logs whose project's deadline matches this filter.
     #[structopt(name = "project-deadline", long)]
@@ -382,10 +386,6 @@ pub struct ListLogs {
     /// (comma-separated).
     #[structopt(name = "project-tags", long)]
     pub maybe_project_tags_filter: Option<String>,
-
-    /// Only return logs whose task IDs match one or more of these IDs.
-    #[structopt(name = "tasks", long)]
-    pub maybe_task_ids_filter: Option<String>,
 
     /// Only return logs whose task's states match one or more of these states
     /// (comma-separated).
