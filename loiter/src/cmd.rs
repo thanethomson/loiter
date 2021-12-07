@@ -155,7 +155,7 @@ pub struct AddLog {
     pub project_id: ProjectId,
 
     /// Optionally, the ID of the task to which this work log relates.
-    #[structopt(name = "task", short, long)]
+    #[structopt(name = "task")]
     #[serde(rename = "task_id")]
     pub maybe_task_id: Option<TaskId>,
 
