@@ -12,6 +12,10 @@ pub type TaskId = u32;
 pub type LogId = u32;
 pub type TaskState = String;
 
+/// Task priority is a numeric value where lower values indicate higher
+/// priority.
+pub type TaskPriority = u8;
+
 /// The minimum number of task states.
 pub const MIN_TASK_STATES: usize = 3;
 
@@ -25,6 +29,15 @@ const DEFAULT_TASK_STATES: &[&str] = &[
     DEFAULT_IN_PROGRESS_TASK_STATE,
     DEFAULT_DONE_TASK_STATE,
 ];
+
+/// The minimum value for task priority (corresponding to the highest priority).
+pub const MIN_TASK_PRIORITY: TaskPriority = 1;
+
+/// The highest value for task priority (corresponding to the lowest priority).
+pub const MAX_TASK_PRIORITY: TaskPriority = 10;
+
+/// By default, tasks have the lowest priority possible.
+pub const DEFAULT_TASK_PRIORITY: TaskPriority = MAX_TASK_PRIORITY;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TaskStateConfig {
@@ -721,6 +734,7 @@ pub enum TaskField {
     Id,
     ProjectId,
     Description,
+    Priority,
     State,
     Deadline,
 }
@@ -728,6 +742,7 @@ pub enum TaskField {
 impl Default for SortSpec<TaskField> {
     fn default() -> Self {
         Self(vec![
+            (TaskField::Priority, Order::Asc),
             (TaskField::ProjectId, Order::Asc),
             (TaskField::Id, Order::Asc),
         ])
@@ -742,6 +757,7 @@ impl Comparator for TaskField {
             Self::Id => a.id().cmp(&b.id()),
             Self::ProjectId => a.project_id().cmp(&b.project_id()),
             Self::Description => a.description().cmp(b.description()),
+            Self::Priority => a.priority().cmp(&b.priority()),
             Self::State => a.state().cmp(&b.state()),
             Self::Deadline => a.deadline().cmp(&b.deadline()),
         }
@@ -762,6 +778,7 @@ impl FromStr for TaskField {
             "id" => Self::Id,
             "project_id" | "project-id" | "project" => Self::ProjectId,
             "description" | "desc" => Self::Description,
+            "priority" => Self::Priority,
             "state" => Self::State,
             "deadline" => Self::Deadline,
             _ => return Err(Error::UnrecognizedTaskField(s.to_string())),
@@ -778,6 +795,7 @@ impl std::fmt::Display for TaskField {
                 Self::Id => "id",
                 Self::ProjectId => "project-id",
                 Self::Description => "description",
+                Self::Priority => "priority",
                 Self::State => "state",
                 Self::Deadline => "deadline",
             }
@@ -792,6 +810,8 @@ pub enum TaskFilter {
     All,
     /// Tasks belonging to the given project.
     Project(ProjectId),
+    /// Tasks matching at least one of the given priorities.
+    Priority(Vec<TaskPriority>),
     /// Tasks matching the given states.
     State(Vec<TaskState>),
     /// Tasks whose states do *not* include the given state.
@@ -819,6 +839,9 @@ impl Filter for TaskFilter {
                 .project_id()
                 .map(|id| id == project_id)
                 .unwrap_or(false),
+            Self::Priority(priorities) => priorities
+                .iter()
+                .any(|priority| task.priority() == *priority),
             Self::State(states) => states
                 .iter()
                 .any(|state| task.state().map(|ts| ts == state).unwrap_or(false)),
@@ -845,6 +868,8 @@ pub struct Task {
     maybe_project_id: Option<ProjectId>,
     #[serde(skip)]
     maybe_id: Option<TaskId>,
+    #[serde(rename = "priority")]
+    maybe_priority: Option<TaskPriority>,
     description: String,
     #[serde(rename = "state")]
     maybe_state: Option<TaskState>,
@@ -863,6 +888,7 @@ impl Task {
         Self {
             maybe_project_id: Some(project_id.as_ref().to_string()),
             maybe_id: None,
+            maybe_priority: None,
             description: description.as_ref().to_string(),
             maybe_state: None,
             maybe_deadline: None,
@@ -878,6 +904,18 @@ impl Task {
     pub fn with_id(mut self, id: TaskId) -> Self {
         self.maybe_id = Some(id);
         self
+    }
+
+    pub fn with_priority(mut self, priority: TaskPriority) -> Result<Self, Error> {
+        if priority < MIN_TASK_PRIORITY || priority > MAX_TASK_PRIORITY {
+            return Err(Error::InvalidTaskPriority(
+                priority,
+                MIN_TASK_PRIORITY,
+                MAX_TASK_PRIORITY,
+            ));
+        }
+        self.maybe_priority = Some(priority);
+        Ok(self)
     }
 
     pub fn with_description<S: AsRef<str>>(mut self, description: S) -> Self {
@@ -923,6 +961,10 @@ impl Task {
 
     pub fn id(&self) -> Option<TaskId> {
         self.maybe_id
+    }
+
+    pub fn priority(&self) -> TaskPriority {
+        self.maybe_priority.unwrap_or(DEFAULT_TASK_PRIORITY)
     }
 
     pub fn description(&self) -> &str {

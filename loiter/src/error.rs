@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::{Log, LogId, ProjectId, Task, TaskId, TaskState};
+use crate::{Log, LogId, ProjectId, Task, TaskId, TaskPriority, TaskState};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -104,4 +104,8 @@ pub enum Error {
     NotRemote(PathBuf),
     #[error("remote push failed: {0}")]
     RemotePushFailed(String),
+    #[error("invalid task priority ({0}) - must be between {1} and {2}")]
+    InvalidTaskPriority(TaskPriority, TaskPriority, TaskPriority),
+    #[error("failed to parse task priority \"{0}\": {1}")]
+    CannotParseTaskPriority(String, std::num::ParseIntError),
 }

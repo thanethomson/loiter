@@ -6,7 +6,7 @@ use comfy_table::{presets, Attribute, Cell, Color, ContentArrangement, Table};
 use crossterm::style::Stylize;
 use loiter::{
     cmd::{ListLogs, ListProjects, LogStatus},
-    Duration, Log, Project, Task, TaskState,
+    Duration, Log, Project, Task, TaskState, MAX_TASK_PRIORITY,
 };
 
 pub const COLOR_STATES: Color = Color::DarkCyan;
@@ -14,6 +14,9 @@ pub const COLOR_PROJECT: Color = Color::Blue;
 pub const COLOR_DEADLINE: Color = Color::Red;
 pub const COLOR_TAGS: Color = Color::Green;
 pub const COLOR_TIME: Color = Color::Cyan;
+pub const COLOR_PRIORITY_HIGH: Color = Color::Red;
+pub const COLOR_PRIORITY_MEDIUM: Color = Color::Yellow;
+pub const COLOR_PRIORITY_LOW: Color = Color::Green;
 
 /// List the given task states.
 pub fn task_states(states: Vec<TaskState>) {
@@ -69,6 +72,7 @@ pub fn tasks(tasks: Vec<Task>) {
         .set_header(header_cells(vec![
             "Project",
             "ID",
+            "Priority",
             "Description",
             "State",
             "Deadline",
@@ -76,9 +80,11 @@ pub fn tasks(tasks: Vec<Task>) {
         ]))
         .set_content_arrangement(ContentArrangement::Dynamic);
     for task in tasks {
+        let priority = task.priority();
         table.add_row(vec![
             Cell::new(task.project_id().unwrap()).fg(COLOR_PROJECT),
             Cell::new(task.id().unwrap()),
+            Cell::new(priority.to_string()).fg(priority_color(priority)),
             Cell::new(task.description()),
             Cell::new(display_optional(task.state())).fg(COLOR_STATES),
             Cell::new(display_optional(task.deadline())).fg(COLOR_DEADLINE),
@@ -275,4 +281,15 @@ fn header_cell<S: ToString>(s: S) -> Cell {
 
 fn header_cells<S: ToString, I: IntoIterator<Item = S>>(headings: I) -> Vec<Cell> {
     headings.into_iter().map(header_cell).collect()
+}
+
+fn priority_color(priority: u8) -> Color {
+    let prio_thresh = MAX_TASK_PRIORITY / 3;
+    if priority <= prio_thresh {
+        COLOR_PRIORITY_HIGH
+    } else if priority <= 2 * prio_thresh {
+        COLOR_PRIORITY_MEDIUM
+    } else {
+        COLOR_PRIORITY_LOW
+    }
 }

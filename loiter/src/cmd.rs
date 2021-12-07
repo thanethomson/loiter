@@ -3,7 +3,7 @@
 use crate::{
     is_dir, is_file, Duration, DurationFilter, Error, FilterSpec, Log, LogField, LogFilter, LogId,
     Project, ProjectField, ProjectFilter, ProjectId, SortSpec, Store, Task, TaskField, TaskFilter,
-    TaskId, TaskState, Timestamp, TimestampFilter,
+    TaskId, TaskPriority, TaskState, Timestamp, TimestampFilter,
 };
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -69,6 +69,11 @@ pub struct AddTask {
     /// A short, human-readable description of what this task is about.
     pub description: String,
 
+    /// The desired priority of the task (lower values correspond to higher
+    /// priority, i.e. 1 is the highest priority, and 10 is the lowest).
+    #[structopt(short, long, default_value = "10")]
+    pub priority: TaskPriority,
+
     /// The desired state of the task once added.
     #[structopt(name = "state", short, long)]
     #[serde(rename = "state")]
@@ -91,6 +96,7 @@ impl TryFrom<&AddTask> for Task {
 
     fn try_from(cmd: &AddTask) -> Result<Self, Self::Error> {
         Task::new(&cmd.project_id, &cmd.description)
+            .with_priority(cmd.priority)?
             .with_maybe_state(cmd.maybe_state.clone())
             .with_maybe_deadline(cmd.maybe_deadline)
             .with_tags(parse_comma_separated(cmd.maybe_tags.clone()))
@@ -110,6 +116,11 @@ pub struct UpdateTask {
     #[structopt(name = "description", short, long)]
     #[serde(rename = "description")]
     pub maybe_description: Option<String>,
+
+    /// Update the task priority.
+    #[structopt(name = "priority", short, long)]
+    #[serde(rename = "priority")]
+    pub maybe_priority: Option<TaskPriority>,
 
     /// Update the state of the task.
     #[structopt(name = "state", short, long)]
@@ -133,6 +144,9 @@ impl UpdateTask {
         let mut task = task.clone();
         if let Some(description) = &self.maybe_description {
             task = task.with_description(description);
+        }
+        if let Some(priority) = &self.maybe_priority {
+            task = task.with_priority(*priority)?;
         }
         if let Some(state) = &self.maybe_state {
             task = task.with_state(state);
@@ -340,6 +354,11 @@ pub struct ListTasks {
     #[structopt(name = "project-tags", long)]
     pub maybe_project_tags_filter: Option<String>,
 
+    /// Only return tasks whose priority matches one or more of these priorities
+    /// (comma-separated).
+    #[structopt(name = "priority", long)]
+    pub maybe_priority_filter: Option<String>,
+
     /// Only return tasks whose states match one or more of these states
     /// (comma-separated). By default, we only list tasks that are not done. To
     /// return tasks with any state, use "any".
@@ -358,7 +377,7 @@ pub struct ListTasks {
     /// Optionally sort the tasks by specific fields (e.g. "id" will sort tasks
     /// in ascending order by ID; "id:desc" will sort by ID in descending order;
     /// "deadline,id" will first sort by deadline and then by ID).
-    #[structopt(short, long, default_value = "project,id")]
+    #[structopt(short, long, default_value = "priority,project,id")]
     pub sort: String,
 }
 
@@ -386,6 +405,11 @@ pub struct ListLogs {
     /// (comma-separated).
     #[structopt(name = "project-tags", long)]
     pub maybe_project_tags_filter: Option<String>,
+
+    /// Only return logs whose associated task's priority matches one or more of
+    /// these priorities (comma-separated).
+    #[structopt(name = "task-priority", long)]
+    pub maybe_task_priority_filter: Option<String>,
 
     /// Only return logs whose task's states match one or more of these states
     /// (comma-separated).
@@ -657,11 +681,20 @@ fn build_project_filter(
 }
 
 fn build_task_filter(
+    maybe_priorities: Option<String>,
     maybe_states: Option<String>,
     maybe_deadline: Option<String>,
     maybe_tags: Option<String>,
 ) -> Result<FilterSpec<TaskFilter>, Error> {
     let mut filter = FilterSpec::new(TaskFilter::All);
+    if let Some(priorities) = maybe_priorities {
+        let priorities = parse_comma_separated(Some(priorities.clone()))
+            .iter()
+            .map(|priority| TaskPriority::from_str(priority))
+            .collect::<Result<Vec<TaskPriority>, std::num::ParseIntError>>()
+            .map_err(|e| Error::CannotParseTaskPriority(priorities, e))?;
+        filter = filter.and_then(TaskFilter::Priority(priorities));
+    }
     if let Some(states) = maybe_states {
         let states = parse_comma_separated(Some(states));
         if states.len() == 1 && states[0].starts_with('!') {
@@ -691,6 +724,7 @@ pub fn list_tasks(store: &Store, params: &ListTasks) -> Result<Vec<Task>, Error>
         params.maybe_project_tags_filter.clone(),
     )?;
     let task_filter = build_task_filter(
+        params.maybe_priority_filter.clone(),
         Some(params.state_filter.clone()),
         params.maybe_deadline_filter.clone(),
         params.maybe_tags_filter.clone(),
@@ -740,6 +774,7 @@ pub fn list_logs(store: &Store, params: &ListLogs) -> Result<Vec<Log>, Error> {
         params.maybe_project_tags_filter.clone(),
     )?;
     let task_filter = build_task_filter(
+        params.maybe_task_priority_filter.clone(),
         params.maybe_task_state_filter.clone(),
         params.maybe_task_deadline_filter.clone(),
         params.maybe_task_tags_filter.clone(),
