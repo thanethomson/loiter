@@ -33,8 +33,8 @@ use serde::Serialize;
 
 use crate::strings::slugify;
 use crate::{
-    Config, Error, Filter, FilterSpec, Log, LogFilter, LogId, Project, ProjectFilter, State, Task,
-    TaskFilter, TaskId, Timestamp,
+    Config, Error, Filter, FilterSpec, Log, LogFilter, LogId, Project, ProjectFilter, ProjectId,
+    State, Task, TaskFilter, TaskId, Timestamp,
 };
 
 const STARTING_TASK_ID: TaskId = 1;
@@ -85,6 +85,23 @@ impl Store {
     /// Save the current global time tracking state.
     pub fn save_state(&self, state: &State) -> Result<(), Error> {
         save_to_json_file(self.state_path(), state)
+    }
+
+    /// Returns the details of the currently active task if it's currently being
+    /// worked on (i.e. if there's an active work log associated with this
+    /// task).
+    pub fn active_task(&self) -> Result<Option<(ProjectId, TaskId)>, Error> {
+        let state = self.state()?;
+        match state.active_log() {
+            Some((project_id, maybe_task_id, _)) => {
+                if let Some(task_id) = maybe_task_id {
+                    Ok(Some((project_id, task_id)))
+                } else {
+                    Ok(None)
+                }
+            }
+            None => Ok(None),
+        }
     }
 
     fn config_path(&self) -> PathBuf {

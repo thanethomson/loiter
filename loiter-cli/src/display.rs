@@ -6,7 +6,7 @@ use comfy_table::{presets, Attribute, Cell, Color, ContentArrangement, Table};
 use crossterm::style::Stylize;
 use loiter::{
     cmd::{ListLogs, ListProjects, LogStatus},
-    Duration, Log, Project, Task, TaskState, MAX_TASK_PRIORITY,
+    Duration, Log, Project, ProjectId, Task, TaskId, TaskState, MAX_TASK_PRIORITY,
 };
 
 pub const COLOR_STATES: Color = Color::DarkCyan;
@@ -65,7 +65,7 @@ pub fn project_removed<S: AsRef<str>>(id: S) {
     println!("Removed project {}", id.as_ref().with(COLOR_PROJECT));
 }
 
-pub fn tasks(tasks: Vec<Task>) {
+pub fn tasks(tasks: Vec<Task>, maybe_active_task: Option<(ProjectId, TaskId)>) {
     let mut table = Table::new();
     table
         .load_preset(presets::NOTHING)
@@ -80,16 +80,39 @@ pub fn tasks(tasks: Vec<Task>) {
         ]))
         .set_content_arrangement(ContentArrangement::Dynamic);
     for task in tasks {
+        let is_active = if let Some((project_id, task_id)) = &maybe_active_task {
+            if task.project_id().unwrap() == project_id && task.id().unwrap() == *task_id {
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
         let priority = task.priority();
-        table.add_row(vec![
+        let mut cells = vec![
             Cell::new(task.project_id().unwrap()).fg(COLOR_PROJECT),
             Cell::new(task.id().unwrap()),
             Cell::new(priority.to_string()).fg(priority_color(priority)),
             Cell::new(task.description()),
-            Cell::new(display_optional(task.state())).fg(COLOR_STATES),
+            Cell::new(format!(
+                "{}{}",
+                display_optional(task.state()),
+                if is_active { " ⏲️" } else { "" }
+            ))
+            .fg(COLOR_STATES),
             Cell::new(display_optional(task.deadline())).fg(COLOR_DEADLINE),
             Cell::new(join(task.tags(), ",")).fg(COLOR_TAGS),
-        ]);
+        ];
+        if is_active {
+            cells = cells
+                .into_iter()
+                .map(|cell| cell.add_attribute(Attribute::Bold))
+                .collect::<Vec<Cell>>();
+        }
+
+        table.add_row(cells);
     }
     println!("{}", table);
 }
