@@ -319,8 +319,8 @@ pub struct ListProjects {
     /// projects in ascending order by name; "name:desc" will sort by name in
     /// descending order; "deadline,name" will first sort by deadline and then
     /// by name).
-    #[structopt(short, long)]
-    pub sort: Option<String>,
+    #[structopt(short, long, default_value = "id")]
+    pub sort: String,
 }
 
 /// List all of the tasks for a project.
@@ -341,9 +341,10 @@ pub struct ListTasks {
     pub maybe_project_tags_filter: Option<String>,
 
     /// Only return tasks whose states match one or more of these states
-    /// (comma-separated).
-    #[structopt(name = "state", long)]
-    pub maybe_state_filter: Option<String>,
+    /// (comma-separated). By default, we only list tasks that are not done. To
+    /// return tasks with any state, use "any".
+    #[structopt(name = "state", long, default_value = "!done")]
+    pub state_filter: String,
 
     /// Only return tasks whose deadline matches the given filter.
     #[structopt(name = "deadline", long)]
@@ -357,8 +358,8 @@ pub struct ListTasks {
     /// Optionally sort the tasks by specific fields (e.g. "id" will sort tasks
     /// in ascending order by ID; "id:desc" will sort by ID in descending order;
     /// "deadline,id" will first sort by deadline and then by ID).
-    #[structopt(short, long)]
-    pub sort: Option<String>,
+    #[structopt(short, long, default_value = "project,id")]
+    pub sort: String,
 }
 
 /// List all of the logs for a project or task.
@@ -416,8 +417,8 @@ pub struct ListLogs {
     /// Optionally sort the logs by specific fields (e.g. "id" will sort logs in
     /// ascending order by ID; "id:desc" will sort by ID in descending order;
     /// "duration,id" will first sort by duration and then by ID).
-    #[structopt(short, long)]
-    pub sort: Option<String>,
+    #[structopt(short, long, default_value = "start")]
+    pub sort: String,
 }
 
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
@@ -628,10 +629,8 @@ pub fn list_projects(store: &Store, params: &ListProjects) -> Result<Vec<Project
     )?;
 
     let mut projects = store.projects(&filter)?;
-    if let Some(sort) = &params.sort {
-        let sort_spec = SortSpec::<ProjectField>::from_str(sort)?;
-        projects = sort_spec.sort(projects);
-    }
+    let sort_spec = SortSpec::<ProjectField>::from_str(&params.sort)?;
+    projects = sort_spec.sort(projects);
     Ok(projects)
 }
 
@@ -658,18 +657,18 @@ fn build_project_filter(
 }
 
 fn build_task_filter(
-    maybe_state: Option<String>,
+    maybe_states: Option<String>,
     maybe_deadline: Option<String>,
     maybe_tags: Option<String>,
 ) -> Result<FilterSpec<TaskFilter>, Error> {
     let mut filter = FilterSpec::new(TaskFilter::All);
-    if let Some(state) = maybe_state {
-        let states = parse_comma_separated(Some(state));
+    if let Some(states) = maybe_states {
+        let states = parse_comma_separated(Some(states));
         if states.len() == 1 && states[0].starts_with('!') {
             filter = filter.and_then(TaskFilter::StateNot(
                 states[0].trim_start_matches('!').to_string(),
             ));
-        } else {
+        } else if !states.is_empty() && states[0] != "any" && states[0] != "all" {
             filter = filter.and_then(TaskFilter::State(states));
         }
     }
@@ -692,16 +691,14 @@ pub fn list_tasks(store: &Store, params: &ListTasks) -> Result<Vec<Task>, Error>
         params.maybe_project_tags_filter.clone(),
     )?;
     let task_filter = build_task_filter(
-        params.maybe_state_filter.clone(),
+        Some(params.state_filter.clone()),
         params.maybe_deadline_filter.clone(),
         params.maybe_tags_filter.clone(),
     )?;
 
     let mut tasks = store.tasks(&project_filter, &task_filter)?;
-    if let Some(sort) = &params.sort {
-        let sort_spec = SortSpec::<TaskField>::from_str(sort)?;
-        tasks = sort_spec.sort(tasks);
-    }
+    let sort_spec = SortSpec::<TaskField>::from_str(&params.sort)?;
+    tasks = sort_spec.sort(tasks);
     Ok(tasks)
 }
 
@@ -756,10 +753,8 @@ pub fn list_logs(store: &Store, params: &ListLogs) -> Result<Vec<Log>, Error> {
     )?;
 
     let mut logs = store.logs(&project_filter, &task_filter, &log_filter)?;
-    if let Some(sort) = &params.sort {
-        let sort_spec = SortSpec::<LogField>::from_str(sort)?;
-        logs = sort_spec.sort(logs);
-    }
+    let sort_spec = SortSpec::<LogField>::from_str(&params.sort)?;
+    logs = sort_spec.sort(logs);
     Ok(logs)
 }
 
