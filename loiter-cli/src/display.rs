@@ -148,6 +148,7 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) {
         total_duration += log.duration().unwrap_or_else(Duration::zero);
     }
     println!("{}", table);
+    println!();
     print!(
         "{} {}",
         log_count,
