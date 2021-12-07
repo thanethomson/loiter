@@ -124,6 +124,7 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) {
                 "Comment",
                 "Tags",
                 "Task Description",
+                "Task Tags",
             ]))
             .set_content_arrangement(ContentArrangement::Dynamic);
     } else {
@@ -144,6 +145,10 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) {
                 Cell::new(display_optional(log.comment())),
                 Cell::new(join(log.tags(), ",")).fg(COLOR_TAGS),
                 Cell::new(display_optional(log.task().map(|task| task.description()))),
+                Cell::new(display_optional(
+                    log.task().map(|task| join(task.tags(), ",")),
+                ))
+                .fg(COLOR_TAGS),
             ]);
         } else {
             table.add_row(vec![
