@@ -209,7 +209,7 @@ pub struct StartLog {
     pub project_id: ProjectId,
 
     /// Optionally, the ID of the task to which this work log relates.
-    #[structopt(name = "task", long)]
+    #[structopt(name = "task")]
     #[serde(rename = "task_id")]
     pub maybe_task_id: Option<TaskId>,
 
