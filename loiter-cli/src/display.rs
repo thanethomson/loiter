@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use comfy_table::{presets, Attribute, Cell, Color, Table};
+use comfy_table::{presets, Attribute, Cell, Color, ContentArrangement, Table};
 use crossterm::style::Stylize;
 use loiter::{
     cmd::{ListLogs, ListProjects, LogStatus},
@@ -73,7 +73,8 @@ pub fn tasks(tasks: Vec<Task>) {
             "State",
             "Deadline",
             "Tags",
-        ]));
+        ]))
+        .set_content_arrangement(ContentArrangement::Dynamic);
     for task in tasks {
         table.add_row(vec![
             Cell::new(task.project_id().unwrap()).fg(COLOR_PROJECT),
@@ -124,7 +125,7 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) {
                 "Tags",
                 "Task Description",
             ]))
-            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+            .set_content_arrangement(ContentArrangement::Dynamic);
     } else {
         table.set_header(header_cells(vec![
             "Project", "Task", "ID", "Start", "Duration", "Tags",
