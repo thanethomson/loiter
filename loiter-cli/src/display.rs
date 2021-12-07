@@ -108,11 +108,20 @@ pub fn task_added(task: &Task) {
     );
 }
 
-pub fn task_updated(task: &Task) {
+pub fn tasks_updated(tasks: Vec<Task>) {
+    let task_count = tasks.len();
+    for task in tasks {
+        println!(
+            "Task {} {} updated for project {}",
+            task.id().unwrap(),
+            task.description().attribute(Attribute::Bold),
+            task.project_id().unwrap().with(COLOR_PROJECT),
+        );
+    }
     println!(
-        "Task {} updated for project {}",
-        task.id().unwrap(),
-        task.project_id().unwrap().with(COLOR_PROJECT),
+        "{} {} updated",
+        task_count,
+        if task_count == 1 { "task" } else { "tasks" }
     );
 }
 

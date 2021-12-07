@@ -103,14 +103,14 @@ impl TryFrom<&AddTask> for Task {
     }
 }
 
-/// Update a specific task.
+/// Update one or more specific tasks.
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
 pub struct UpdateTask {
-    /// The ID of the project whose task must be updated.
+    /// The ID of the project whose task(s) must be updated.
     pub project_id: ProjectId,
 
-    /// The ID of the task to update.
-    pub task_id: TaskId,
+    /// The ID(s) of the task(s) to update (comma-separated).
+    pub task_ids: String,
 
     /// Update the task description.
     #[structopt(name = "description", short, long)]
@@ -492,16 +492,21 @@ pub fn add_task(store: &Store, params: &AddTask) -> Result<Task, Error> {
     Ok(task)
 }
 
-/// Update one or more fields of a specific task.
-pub fn update_task(store: &Store, params: &UpdateTask) -> Result<Task, Error> {
-    let task = store.task(&params.project_id, params.task_id)?;
-    let task = store.save_task(&params.apply(&task)?)?;
-    debug!(
-        "Updated task {} for project {}",
-        task.id().unwrap(),
-        task.project_id().unwrap(),
-    );
-    Ok(task)
+/// Update one or more fields of one or more specific tasks.
+pub fn update_tasks(store: &Store, params: &UpdateTask) -> Result<Vec<Task>, Error> {
+    let task_ids = parse_comma_separated(Some(params.task_ids.clone()))
+        .iter()
+        .map(|s| TaskId::from_str(s))
+        .collect::<Result<Vec<TaskId>, std::num::ParseIntError>>()
+        .map_err(|e| Error::InvalidTaskIds(params.task_ids.clone(), e))?;
+    let project_filter = FilterSpec::new(ProjectFilter::Ids(vec![params.project_id.clone()]));
+    let task_filter = FilterSpec::new(TaskFilter::Ids(task_ids));
+    let tasks = store.tasks(&project_filter, &task_filter)?;
+    let updated_tasks = tasks
+        .into_iter()
+        .map(|task| store.save_task(&params.apply(&task)?))
+        .collect::<Result<Vec<Task>, Error>>()?;
+    Ok(updated_tasks)
 }
 
 /// Add a new log for a project or task.

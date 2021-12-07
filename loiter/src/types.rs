@@ -810,6 +810,8 @@ pub enum TaskFilter {
     All,
     /// Tasks belonging to the given project.
     Project(ProjectId),
+    /// Tasks whose IDs match one or more of the given IDs.
+    Ids(Vec<TaskId>),
     /// Tasks matching at least one of the given priorities.
     Priority(Vec<TaskPriority>),
     /// Tasks matching the given states.
@@ -838,6 +840,10 @@ impl Filter for TaskFilter {
             Self::Project(project_id) => task
                 .project_id()
                 .map(|id| id == project_id)
+                .unwrap_or(false),
+            Self::Ids(ids) => task
+                .id()
+                .map(|task_id| ids.iter().any(|id| *id == task_id))
                 .unwrap_or(false),
             Self::Priority(priorities) => priorities
                 .iter()
@@ -907,7 +913,7 @@ impl Task {
     }
 
     pub fn with_priority(mut self, priority: TaskPriority) -> Result<Self, Error> {
-        if priority < MIN_TASK_PRIORITY || priority > MAX_TASK_PRIORITY {
+        if !(MIN_TASK_PRIORITY..=MAX_TASK_PRIORITY).contains(&priority) {
             return Err(Error::InvalidTaskPriority(
                 priority,
                 MIN_TASK_PRIORITY,

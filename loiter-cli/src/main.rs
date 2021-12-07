@@ -145,7 +145,7 @@ fn remove(store: &Store, cmd: RemoveCommand) -> Result<(), Box<dyn Error>> {
 
 fn update(store: &Store, cmd: UpdateCommand) -> Result<(), Box<dyn Error>> {
     match cmd {
-        UpdateCommand::Task(params) => display::task_updated(&cmd::update_task(store, &params)?),
+        UpdateCommand::Task(params) => display::tasks_updated(cmd::update_tasks(store, &params)?),
     }
     Ok(())
 }
