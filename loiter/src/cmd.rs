@@ -260,6 +260,10 @@ impl TryFrom<&StartLog> for Log {
 /// log ID (and possibly task ID) are provided.
 #[derive(Debug, Clone, Default, StructOpt, Serialize, Deserialize)]
 pub struct StopLog {
+    /// Automatically mark the associated task, if any, as done.
+    #[structopt(long)]
+    pub task_done: bool,
+
     /// For specifying a specific work log to stop.
     #[structopt(name = "project", short, long)]
     pub maybe_project_id: Option<ProjectId>,
@@ -590,11 +594,28 @@ pub fn stop_log(store: &Store, params: &StopLog) -> Result<Log, Error> {
     if let Some(tags) = &params.maybe_tags {
         log = log.with_tags(parse_comma_separated(Some(tags.clone())))?;
     }
-
     let log = store.save_log(&log)?;
     if selected_active_log {
         let state = state.with_no_active_log();
         store.save_state(&state)?;
+    }
+    if params.task_done {
+        if let Some(task) = log.task() {
+            let config = store.config()?;
+            let global_tsc = config.task_state_config();
+            let project = store.project(task.project_id().unwrap())?;
+            let tsc = project.task_state_config().unwrap_or(global_tsc);
+            let task = store
+                .task(task.project_id().unwrap(), task.id().unwrap())?
+                .with_state(tsc.done());
+            let task = store.save_task(&task)?;
+            debug!(
+                "Automatically marked task {} of project {} as {}",
+                task.id().unwrap(),
+                task.project_id().unwrap(),
+                tsc.done(),
+            );
+        }
     }
     debug!(
         "Stopped log {} for project {}{} at {} ({})",

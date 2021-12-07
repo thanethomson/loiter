@@ -81,11 +81,7 @@ pub fn tasks(tasks: Vec<Task>, maybe_active_task: Option<(ProjectId, TaskId)>) {
         .set_content_arrangement(ContentArrangement::Dynamic);
     for task in tasks {
         let is_active = if let Some((project_id, task_id)) = &maybe_active_task {
-            if task.project_id().unwrap() == project_id && task.id().unwrap() == *task_id {
-                true
-            } else {
-                false
-            }
+            task.project_id().unwrap() == project_id && task.id().unwrap() == *task_id
         } else {
             false
         };
