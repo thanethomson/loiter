@@ -21,6 +21,7 @@ const DEFAULT_DONE_TASK_STATE: &str = "done";
 const DEFAULT_TASK_STATES: &[&str] = &[
     DEFAULT_INITIAL_TASK_STATE,
     "todo",
+    "blocked",
     DEFAULT_IN_PROGRESS_TASK_STATE,
     DEFAULT_DONE_TASK_STATE,
 ];
