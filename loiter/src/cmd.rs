@@ -168,15 +168,13 @@ pub struct AddLog {
     #[structopt(name = "project")]
     pub project_id: ProjectId,
 
+    /// Specify the start time for this log.
+    pub start: Timestamp,
+
     /// Optionally, the ID of the task to which this work log relates.
     #[structopt(name = "task")]
     #[serde(rename = "task_id")]
     pub maybe_task_id: Option<TaskId>,
-
-    /// Optionally specify the start time for this log.
-    #[structopt(name = "from", long)]
-    #[serde(rename = "start")]
-    pub maybe_start: Option<Timestamp>,
 
     /// Optionally specify the stop time for this log (cannot be used with
     /// duration).
@@ -207,8 +205,8 @@ impl TryFrom<&AddLog> for Log {
 
     fn try_from(cmd: &AddLog) -> Result<Self, Self::Error> {
         Log::new(&cmd.project_id)
+            .with_start(cmd.start)
             .with_maybe_task_id(cmd.maybe_task_id)
-            .with_maybe_start(cmd.maybe_start)
             .with_maybe_duration_or_stop(cmd.maybe_duration, cmd.maybe_stop)?
             .with_maybe_comment(cmd.maybe_comment.clone())
             .with_tags(parse_comma_separated(cmd.maybe_tags.clone()))
