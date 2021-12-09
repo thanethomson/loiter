@@ -19,14 +19,14 @@ fn store_and_load() {
         Task::new("project-1", "Some task").with_state(config.task_state_config().initial());
     let task1 = store.save_task(&task1).unwrap();
     assert_eq!(task1.id().unwrap(), 1);
-    let loaded_task1 = store.task("project-1", 1).unwrap();
+    let loaded_task1 = store.task("project-1", 1, false).unwrap();
     assert_eq!(task1, loaded_task1);
 
     let task2 =
         Task::new("project-1", "Another task").with_state(config.task_state_config().done());
     let task2 = store.save_task(&task2).unwrap();
     assert_eq!(task2.id().unwrap(), 2);
-    let loaded_task2 = store.task("project-1", 2).unwrap();
+    let loaded_task2 = store.task("project-1", 2, false).unwrap();
     assert_eq!(task2, loaded_task2);
 }
 
@@ -48,10 +48,10 @@ fn rename_project() {
     assert_eq!(project_renamed, loaded_project_renamed);
 
     // The old task should be part of the renamed project now.
-    let loaded_task1 = store.task("project-renamed", 1).unwrap();
+    let loaded_task1 = store.task("project-renamed", 1, false).unwrap();
     assert_eq!(loaded_task1.description(), task1.description());
 
     // We should not be able to find the task under the old project any more.
-    let r = store.task("project-1", 1);
+    let r = store.task("project-1", 1, false);
     assert!(r.is_err());
 }

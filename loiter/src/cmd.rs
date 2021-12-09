@@ -504,7 +504,7 @@ pub fn update_tasks(store: &Store, params: &UpdateTask) -> Result<Vec<Task>, Err
         .map_err(|e| Error::InvalidTaskIds(params.task_ids.clone(), e))?;
     let project_filter = FilterSpec::new(ProjectFilter::Ids(vec![params.project_id.clone()]));
     let task_filter = FilterSpec::new(TaskFilter::Ids(task_ids));
-    let tasks = store.tasks(&project_filter, &task_filter)?;
+    let tasks = store.tasks(&project_filter, &task_filter, false)?;
     let updated_tasks = tasks
         .into_iter()
         .map(|task| store.save_task(&params.apply(&task)?))
@@ -540,7 +540,7 @@ pub fn start_log(store: &Store, params: &StartLog) -> Result<Log, Error> {
     store.save_state(&state)?;
     if let Some(task_id) = log.task_id() {
         let project = store.project(log.project_id().unwrap())?;
-        let task = store.task(log.project_id().unwrap(), task_id)?;
+        let task = store.task(log.project_id().unwrap(), task_id, false)?;
         let config = store.config()?;
         let task_state_config = project
             .task_state_config()
@@ -605,7 +605,7 @@ pub fn stop_log(store: &Store, params: &StopLog) -> Result<Log, Error> {
             let project = store.project(task.project_id().unwrap())?;
             let tsc = project.task_state_config().unwrap_or(global_tsc);
             let task = store
-                .task(task.project_id().unwrap(), task.id().unwrap())?
+                .task(task.project_id().unwrap(), task.id().unwrap(), false)?
                 .with_state(tsc.done());
             let task = store.save_task(&task)?;
             debug!(
@@ -755,7 +755,7 @@ pub fn list_tasks(store: &Store, params: &ListTasks) -> Result<Vec<Task>, Error>
         params.maybe_tags_filter.clone(),
     )?;
 
-    let mut tasks = store.tasks(&project_filter, &task_filter)?;
+    let mut tasks = store.tasks(&project_filter, &task_filter, true)?;
     let sort_spec = SortSpec::<TaskField>::from_str(&params.sort)?;
     tasks = sort_spec.sort(tasks);
     Ok(tasks)
@@ -834,7 +834,12 @@ pub fn active_log_status(store: &Store) -> Result<Option<LogStatus>, Error> {
             let start = log.start().unwrap();
             let active_for = Timestamp::now()? - start;
             let maybe_task_description = match maybe_task_id {
-                Some(task_id) => Some(store.task(&project_id, task_id)?.description().to_string()),
+                Some(task_id) => Some(
+                    store
+                        .task(&project_id, task_id, false)?
+                        .description()
+                        .to_string(),
+                ),
                 None => None,
             };
             Ok(Some(LogStatus {

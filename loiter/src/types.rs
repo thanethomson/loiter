@@ -737,6 +737,7 @@ pub enum TaskField {
     Priority,
     State,
     Deadline,
+    TimeLogged,
 }
 
 impl Default for SortSpec<TaskField> {
@@ -760,6 +761,14 @@ impl Comparator for TaskField {
             Self::Priority => a.priority().cmp(&b.priority()),
             Self::State => a.state().cmp(&b.state()),
             Self::Deadline => a.deadline().cmp(&b.deadline()),
+            Self::TimeLogged => a
+                .stats()
+                .map(|a_stats| {
+                    b.stats()
+                        .map(|b_stats| a_stats.time_logged.cmp(&b_stats.time_logged))
+                })
+                .flatten()
+                .unwrap_or(std::cmp::Ordering::Equal),
         }
     }
 }
@@ -781,6 +790,7 @@ impl FromStr for TaskField {
             "priority" => Self::Priority,
             "state" => Self::State,
             "deadline" => Self::Deadline,
+            "time_logged" | "time-logged" | "logged" => Self::TimeLogged,
             _ => return Err(Error::UnrecognizedTaskField(s.to_string())),
         })
     }
@@ -798,6 +808,7 @@ impl std::fmt::Display for TaskField {
                 Self::Priority => "priority",
                 Self::State => "state",
                 Self::Deadline => "deadline",
+                Self::TimeLogged => "logged",
             }
         )
     }
@@ -882,6 +893,8 @@ pub struct Task {
     #[serde(rename = "deadline")]
     maybe_deadline: Option<Timestamp>,
     tags: HashSet<String>,
+    #[serde(skip)]
+    maybe_stats: Option<TaskStats>,
 }
 
 impl Task {
@@ -899,6 +912,7 @@ impl Task {
             maybe_state: None,
             maybe_deadline: None,
             tags: HashSet::new(),
+            maybe_stats: None,
         }
     }
 
@@ -961,6 +975,11 @@ impl Task {
         Ok(self)
     }
 
+    pub fn with_stats(mut self, stats: TaskStats) -> Self {
+        self.maybe_stats = Some(stats);
+        self
+    }
+
     pub fn project_id(&self) -> Option<&str> {
         self.maybe_project_id.as_deref()
     }
@@ -988,6 +1007,17 @@ impl Task {
     pub fn tags(&self) -> impl Iterator<Item = &str> {
         self.tags.iter().map(|t| t.as_str())
     }
+
+    pub fn stats(&self) -> Option<&TaskStats> {
+        self.maybe_stats.as_ref()
+    }
+}
+
+/// Statistics relating to a particular task.
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq)]
+pub struct TaskStats {
+    /// How much time has been logged for this task so far?
+    pub time_logged: Duration,
 }
 
 /// The fields on which work log listings can be sorted.

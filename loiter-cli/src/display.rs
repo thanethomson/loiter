@@ -77,6 +77,7 @@ pub fn tasks(tasks: Vec<Task>, maybe_active_task: Option<(ProjectId, TaskId)>) {
             "State",
             "Deadline",
             "Tags",
+            "Logged",
         ]))
         .set_content_arrangement(ContentArrangement::Dynamic);
     for task in tasks {
@@ -100,6 +101,10 @@ pub fn tasks(tasks: Vec<Task>, maybe_active_task: Option<(ProjectId, TaskId)>) {
             .fg(COLOR_STATES),
             Cell::new(display_optional(task.deadline())).fg(COLOR_DEADLINE),
             Cell::new(join(task.tags(), ",")).fg(COLOR_TAGS),
+            Cell::new(display_optional(
+                task.stats().map(|stats| stats.time_logged),
+            ))
+            .fg(COLOR_TIME),
         ];
         if is_active {
             cells = cells

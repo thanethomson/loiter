@@ -33,8 +33,8 @@ use serde::Serialize;
 
 use crate::strings::slugify;
 use crate::{
-    Config, Error, Filter, FilterSpec, Log, LogFilter, LogId, Project, ProjectFilter, ProjectId,
-    State, Task, TaskFilter, TaskId, Timestamp,
+    Config, Duration, Error, Filter, FilterSpec, Log, LogFilter, LogId, Project, ProjectFilter,
+    ProjectId, State, Task, TaskFilter, TaskId, TaskStats, Timestamp,
 };
 
 const STARTING_TASK_ID: TaskId = 1;
@@ -235,11 +235,12 @@ impl Store {
         &self,
         project_filter: &FilterSpec<ProjectFilter>,
         task_filter: &FilterSpec<TaskFilter>,
+        collect_stats: bool,
     ) -> Result<Vec<Task>, Error> {
         let projects = self.projects(project_filter)?;
         let tasks = projects
             .into_iter()
-            .map(|project| self.project_tasks(project.id(), task_filter))
+            .map(|project| self.project_tasks(project.id(), task_filter, collect_stats))
             .collect::<Result<Vec<Vec<Task>>, Error>>()?
             .into_iter()
             .fold(Vec::new(), |mut acc, mut v| {
@@ -254,6 +255,7 @@ impl Store {
         &self,
         project_id: &str,
         task_filter: &FilterSpec<TaskFilter>,
+        collect_stats: bool,
     ) -> Result<Vec<Task>, Error> {
         let now = Timestamp::now()?;
         let tasks_path = self.tasks_path(project_id);
@@ -270,7 +272,7 @@ impl Store {
                             Ok(task_id) => task_id,
                             Err(_) => return None,
                         };
-                        return match self.task(project_id, task_id) {
+                        return match self.task(project_id, task_id, collect_stats) {
                             Ok(task) => {
                                 if task_filter.matches(&task, now) {
                                     debug!("Task matches filter spec: {:?}", task);
@@ -298,21 +300,49 @@ impl Store {
         self.task_path(project_id, task_id).join("task.json")
     }
 
+    fn task_stats(&self, project_id: &str, task_id: TaskId) -> Result<TaskStats, Error> {
+        let logs = self.logs_for_project_or_task(
+            project_id,
+            Some(task_id),
+            &FilterSpec::new(LogFilter::All),
+            false,
+            None,
+        )?;
+        let time_logged =
+            logs.iter()
+                .filter_map(Log::duration)
+                .fold(Duration::zero(), |mut acc, d| {
+                    acc += d;
+                    acc
+                });
+        Ok(TaskStats { time_logged })
+    }
+
     /// Attempt to get a task by its ID and its project's ID.
-    pub fn task(&self, project_id: &str, task_id: TaskId) -> Result<Task, Error> {
+    pub fn task(
+        &self,
+        project_id: &str,
+        task_id: TaskId,
+        collect_stats: bool,
+    ) -> Result<Task, Error> {
         let task_path = self.task_path(project_id, task_id);
         let task_meta_path = self.task_meta_path(project_id, task_id);
         if !is_dir(&task_path) || !is_file(&task_meta_path) {
             return Err(Error::TaskNotFound(project_id.to_string(), task_id));
         }
-        Ok(load_from_json_file::<&PathBuf, Task>(&task_meta_path)?
+        let mut task = load_from_json_file::<&PathBuf, Task>(&task_meta_path)?
             .with_project_id(project_id)
-            .with_id(task_id))
+            .with_id(task_id);
+        if collect_stats {
+            let task_stats = self.task_stats(project_id, task_id)?;
+            task = task.with_stats(task_stats);
+        }
+        Ok(task)
     }
 
     fn next_task_id(&self, project_id: &str) -> Result<TaskId, Error> {
         Ok(self
-            .project_tasks(project_id, &FilterSpec::new(TaskFilter::All))?
+            .project_tasks(project_id, &FilterSpec::new(TaskFilter::All), false)?
             .into_iter()
             .map(|task| task.id().unwrap())
             .max()
@@ -381,7 +411,7 @@ impl Store {
         detailed: bool,
     ) -> Result<Vec<Log>, Error> {
         let projects = self.projects(project_filter)?;
-        let tasks = self.tasks(project_filter, task_filter)?;
+        let tasks = self.tasks(project_filter, task_filter, false)?;
         let mut logs = projects
             .into_iter()
             .map(|project| {
