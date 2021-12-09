@@ -261,7 +261,7 @@ impl TryFrom<&StartLog> for Log {
 pub struct StopLog {
     /// Automatically mark the associated task, if any, as done.
     #[structopt(long)]
-    pub task_done: bool,
+    pub done: bool,
 
     /// For specifying a specific work log to stop.
     #[structopt(name = "project", short, long)]
@@ -598,7 +598,7 @@ pub fn stop_log(store: &Store, params: &StopLog) -> Result<Log, Error> {
         let state = state.with_no_active_log();
         store.save_state(&state)?;
     }
-    if params.task_done {
+    if params.done {
         if let Some(task) = log.task() {
             let config = store.config()?;
             let global_tsc = config.task_state_config();
