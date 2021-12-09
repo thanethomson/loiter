@@ -168,17 +168,18 @@ pub struct AddLog {
     #[structopt(name = "project")]
     pub project_id: ProjectId,
 
-    /// Specify the start time for this log.
-    pub start: Timestamp,
-
     /// Optionally, the ID of the task to which this work log relates.
     #[structopt(name = "task")]
     #[serde(rename = "task_id")]
     pub maybe_task_id: Option<TaskId>,
 
+    /// Specify the start time for this log.
+    #[structopt(name = "from", short, long)]
+    pub start: Timestamp,
+
     /// Optionally specify the stop time for this log (cannot be used with
     /// duration).
-    #[structopt(name = "to", long)]
+    #[structopt(name = "to", short, long)]
     #[serde(rename = "stop")]
     pub maybe_stop: Option<Timestamp>,
 
