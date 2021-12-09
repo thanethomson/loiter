@@ -593,27 +593,30 @@ pub fn stop_log(store: &Store, params: &StopLog) -> Result<Log, Error> {
     if let Some(tags) = &params.maybe_tags {
         log = log.with_tags(parse_comma_separated(Some(tags.clone())))?;
     }
-    let log = store.save_log(&log)?;
+    let mut log = store.save_log(&log)?;
     if selected_active_log {
         let state = state.with_no_active_log();
         store.save_state(&state)?;
     }
     if params.done {
-        if let Some(task) = log.task() {
+        if let Some(task_id) = log.task_id() {
+            let mut task = store.task(log.project_id().unwrap(), task_id, false)?;
             let config = store.config()?;
             let global_tsc = config.task_state_config();
             let project = store.project(task.project_id().unwrap())?;
             let tsc = project.task_state_config().unwrap_or(global_tsc);
-            let task = store
-                .task(task.project_id().unwrap(), task.id().unwrap(), false)?
-                .with_state(tsc.done());
-            let task = store.save_task(&task)?;
+
+            task = task.with_state(tsc.done());
+            task = store.save_task(&task)?;
             debug!(
                 "Automatically marked task {} of project {} as {}",
                 task.id().unwrap(),
                 task.project_id().unwrap(),
                 tsc.done(),
             );
+            log = log.with_maybe_task(Some(task));
+        } else {
+            debug!("Log not associated with any task - ignoring --done parameter.");
         }
     }
     debug!(
