@@ -277,6 +277,39 @@ impl Duration {
     pub fn zero() -> Self {
         Self(time::Duration::ZERO)
     }
+
+    /// Return this duration in a tuple containing `(days, hours, minutes,
+    /// seconds)`.
+    pub fn hms(&self) -> (i64, i64, i64) {
+        let hours = self.0.whole_hours();
+        let hours_duration = time::Duration::HOUR
+            .checked_mul(hours.try_into().unwrap())
+            .unwrap();
+        let mins = (self.0 - hours_duration).whole_minutes();
+        let mins_duration = time::Duration::MINUTE
+            .checked_mul(mins.try_into().unwrap())
+            .unwrap();
+        let secs = (self.0 - hours_duration - mins_duration).whole_seconds();
+        (hours, mins, secs)
+    }
+
+    pub fn to_aligned_string(&self) -> String {
+        let (hours, mins, secs) = self.hms();
+        let parts = [hours, mins, secs];
+        let suffixes = ["h", "m", "s"];
+        parts
+            .iter()
+            .position(|part| *part > 0)
+            .map(|first_non_zero| {
+                parts[first_non_zero..]
+                    .iter()
+                    .zip(&suffixes[first_non_zero..])
+                    .map(|(part, suffix)| format!("{:2}{}", part, suffix))
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            })
+            .unwrap_or_else(|| "".to_string())
+    }
 }
 
 impl From<time::Duration> for Duration {
@@ -324,42 +357,18 @@ impl FromStr for Duration {
 
 impl std::fmt::Display for Duration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let weeks = self.0.whole_weeks();
-        let weeks_duration = time::Duration::WEEK
-            .checked_mul(weeks.try_into().unwrap())
-            .unwrap();
-        let days = (self.0 - weeks_duration).whole_days();
-        let days_duration = time::Duration::DAY
-            .checked_mul(days.try_into().unwrap())
-            .unwrap();
-        let hours = (self.0 - weeks_duration - days_duration).whole_hours();
-        let hours_duration = time::Duration::HOUR
-            .checked_mul(hours.try_into().unwrap())
-            .unwrap();
-        let mins = (self.0 - weeks_duration - days_duration - hours_duration).whole_minutes();
-        let mins_duration = time::Duration::MINUTE
-            .checked_mul(mins.try_into().unwrap())
-            .unwrap();
-        let secs = (self.0 - weeks_duration - days_duration - hours_duration - mins_duration)
-            .whole_seconds();
-
-        let s: String = [
-            (weeks, "w"),
-            (days, "d"),
-            (hours, "h"),
-            (mins, "m"),
-            (secs, "s"),
-        ]
-        .into_iter()
-        .filter_map(|(amt, unit)| {
-            if amt > 0 {
-                Some(format!("{}{}", amt, unit))
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<String>>()
-        .join(" ");
+        let (hours, mins, secs) = self.hms();
+        let s: String = [(hours, "h"), (mins, "m"), (secs, "s")]
+            .into_iter()
+            .filter_map(|(amt, unit)| {
+                if amt > 0 {
+                    Some(format!("{}{}", amt, unit))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<String>>()
+            .join(" ");
         write!(f, "{}", s)
     }
 }
@@ -499,11 +508,11 @@ mod test {
             (1, "1s".to_string()),
             (60 * 60, "1h".to_string()),
             ((30 * 60) + (60 * 60), "1h 30m".to_string()),
-            (24 * 60 * 60, "1d".to_string()),
-            (7 * 24 * 60 * 60, "1w".to_string()),
+            (24 * 60 * 60, "24h".to_string()),
+            (7 * 24 * 60 * 60, "168h".to_string()),
             (
-                (7 * 24 * 60 * 60) + (3 * 24 * 60 * 60) + (4 * 60 * 60),
-                "1w 3d 4h".to_string()
+                (7 * 24 * 60 * 60) + (3 * 24 * 60 * 60) + (4 * 60 * 60) + (5 * 60),
+                "244h 5m".to_string()
             ),
         ];
     }
@@ -528,7 +537,7 @@ mod test {
     fn duration_formatting() {
         for (secs, expected) in DURATION_FORMAT_TEST_CASES.iter() {
             let duration: Duration = time::Duration::seconds(*secs).into();
-            let actual = duration.to_string();
+            let actual = duration.to_string().trim().to_string();
             assert_eq!(&actual, expected);
         }
     }

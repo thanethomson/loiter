@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use comfy_table::{presets, Attribute, Cell, Color, ContentArrangement, Table};
+use comfy_table::{presets, Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
 use crossterm::style::Stylize;
 use loiter::{
     cmd::{ListLogs, ListProjects, LogStatus},
@@ -102,9 +102,11 @@ pub fn tasks(tasks: Vec<Task>, maybe_active_task: Option<(ProjectId, TaskId)>) {
             Cell::new(display_optional(task.deadline())).fg(COLOR_DEADLINE),
             Cell::new(join(task.tags(), ",")).fg(COLOR_TAGS),
             Cell::new(display_optional(
-                task.stats().map(|stats| stats.time_logged),
+                task.stats()
+                    .map(|stats| stats.time_logged.to_aligned_string()),
             ))
-            .fg(COLOR_TIME),
+            .fg(COLOR_TIME)
+            .set_alignment(CellAlignment::Right),
         ];
         if is_active {
             cells = cells
@@ -180,7 +182,11 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) {
                 Cell::new(display_optional(log.task_id())),
                 Cell::new(log.id().unwrap()),
                 Cell::new(display_optional(log.start())).fg(COLOR_TIME),
-                Cell::new(display_optional(log.duration())).fg(COLOR_TIME),
+                Cell::new(display_optional(
+                    log.duration().map(|d| d.to_aligned_string()),
+                ))
+                .fg(COLOR_TIME)
+                .set_alignment(CellAlignment::Right),
                 Cell::new(display_optional(log.comment())),
                 Cell::new(join(log.tags(), ",")).fg(COLOR_TAGS),
                 Cell::new(display_optional(log.task().map(|task| task.description()))),
@@ -195,7 +201,11 @@ pub fn logs(logs: Vec<Log>, params: &ListLogs) {
                 Cell::new(display_optional(log.task_id())),
                 Cell::new(log.id().unwrap()),
                 Cell::new(display_optional(log.start())).fg(COLOR_TIME),
-                Cell::new(display_optional(log.duration())).fg(COLOR_TIME),
+                Cell::new(display_optional(
+                    log.duration().map(|d| d.to_aligned_string()),
+                ))
+                .fg(COLOR_TIME)
+                .set_alignment(CellAlignment::Right),
                 Cell::new(join(log.tags(), ",")).fg(COLOR_TAGS),
             ]);
         }
