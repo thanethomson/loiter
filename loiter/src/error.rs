@@ -108,4 +108,14 @@ pub enum Error {
     InvalidTaskPriority(TaskPriority, TaskPriority, TaskPriority),
     #[error("failed to parse task priority \"{0}\": {1}")]
     CannotParseTaskPriority(String, std::num::ParseIntError),
+    #[error("failed to parse URL \"{0}\": {1}")]
+    UrlParsingFailed(String, url::ParseError),
+    #[error("no GitHub organization configured for project \"{0}\"")]
+    NoProjectGitHubOrg(String),
+    #[error("no GitHub project configured for project \"{0}\"")]
+    NoProjectGitHubProject(String),
+    #[error("invalid GitHub issue number supplied (must be a non-zero integer): \"{0}\"")]
+    InvalidGitHubIssueNo(String),
+    #[error("invalid GitHub pull request number supplied (must be a non-zero integer): \"{0}\"")]
+    InvalidGitHubPullRequestNo(String),
 }

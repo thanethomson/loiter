@@ -160,9 +160,11 @@ fn list(store: &Store, cmd: ListCommand) -> Result<(), Box<dyn Error>> {
         ListCommand::Projects(params) => {
             display::projects(cmd::list_projects(store, &params)?, &params)
         }
-        ListCommand::Tasks(params) => {
-            display::tasks(cmd::list_tasks(store, &params)?, store.active_task()?)
-        }
+        ListCommand::Tasks(params) => display::tasks(
+            cmd::list_tasks(store, &params)?,
+            store.active_task()?,
+            &params,
+        ),
         ListCommand::Logs(params) => display::logs(cmd::list_logs(store, &params)?, &params),
     }
     Ok(())

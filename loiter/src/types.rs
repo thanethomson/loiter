@@ -1,9 +1,10 @@
 //! Data types used by Loiter.
 
-use std::{collections::HashSet, str::FromStr};
+use std::{collections::HashSet, num::NonZeroU32, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use url::Url;
 
 use crate::{strings::slugify, Duration, Error, Timestamp};
 
@@ -630,6 +631,10 @@ pub struct Project {
     #[serde(rename = "deadline")]
     maybe_deadline: Option<Timestamp>,
     tags: HashSet<String>,
+    #[serde(rename = "github_org")]
+    maybe_github_org: Option<String>,
+    #[serde(rename = "github_project")]
+    maybe_github_project: Option<String>,
     #[serde(rename = "task_state_config")]
     maybe_task_state_config: Option<TaskStateConfig>,
 }
@@ -644,6 +649,8 @@ impl Project {
             maybe_description: None,
             maybe_deadline: None,
             tags: HashSet::new(),
+            maybe_github_org: None,
+            maybe_github_project: None,
             maybe_task_state_config: None,
         }
     }
@@ -686,6 +693,16 @@ impl Project {
         Ok(self)
     }
 
+    pub fn with_github_details<S1, S2>(mut self, org: S1, project: S2) -> Self
+    where
+        S1: AsRef<str>,
+        S2: AsRef<str>,
+    {
+        self.maybe_github_org = Some(org.as_ref().to_string());
+        self.maybe_github_project = Some(project.as_ref().to_string());
+        self
+    }
+
     pub fn with_task_state_config(mut self, config: &TaskStateConfig) -> Self {
         self.maybe_task_state_config = Some(config.clone());
         self
@@ -709,6 +726,81 @@ impl Project {
 
     pub fn tags(&self) -> impl Iterator<Item = &str> {
         self.tags.iter().map(|t| t.as_str())
+    }
+
+    pub fn github_org(&self) -> Option<&str> {
+        self.maybe_github_org.as_deref()
+    }
+
+    pub fn github_project(&self) -> Option<&str> {
+        self.maybe_github_project.as_deref()
+    }
+
+    /// Computes the GitHub URL for this project from its organization and
+    /// GitHub project fields, if present.
+    ///
+    /// If either is missing, returns `None`.
+    pub fn github_url(&self) -> Option<Result<Url, Error>> {
+        let org = self.github_org()?;
+        let project = self.github_project()?;
+        let url_str = format!("https://github.com/{}/{}", org, project);
+        match Url::parse(&url_str) {
+            Ok(u) => Some(Ok(u)),
+            Err(e) => Some(Err(Error::UrlParsingFailed(url_str, e))),
+        }
+    }
+
+    /// Compute a GitHub issue URL from the given issue number.
+    ///
+    /// If a pull request number is supplied, GitHub currently automatically
+    /// redirects you to the `pull` path instead.
+    pub fn github_issue_url<U>(&self, issue_no: U) -> Option<Result<Url, Error>>
+    where
+        U: TryInto<NonZeroU32>,
+        U::Error: std::error::Error,
+    {
+        let issue_no: NonZeroU32 = match issue_no.try_into() {
+            Ok(n) => n,
+            Err(e) => return Some(Err(Error::InvalidGitHubIssueNo(e.to_string()))),
+        };
+        let mut issue_url = match self.github_url()? {
+            Ok(u) => u,
+            Err(e) => return Some(Err(e)),
+        };
+        let mut path_parts = issue_url
+            .path()
+            .trim_matches('/')
+            .split('/')
+            .map(|p| p.to_string())
+            .collect::<Vec<String>>();
+        path_parts.append(&mut vec!["issues".to_string(), issue_no.to_string()]);
+        issue_url.set_path(path_parts.join("/").as_str());
+        Some(Ok(issue_url))
+    }
+
+    /// Compute a GitHub pull request URL from the given pull request number.
+    pub fn github_pr_url<U>(&self, pr_no: U) -> Option<Result<Url, Error>>
+    where
+        U: TryInto<NonZeroU32>,
+        U::Error: std::error::Error,
+    {
+        let pr_no: NonZeroU32 = match pr_no.try_into() {
+            Ok(n) => n,
+            Err(e) => return Some(Err(Error::InvalidGitHubPullRequestNo(e.to_string()))),
+        };
+        let mut pr_url = match self.github_url()? {
+            Ok(u) => u,
+            Err(e) => return Some(Err(e)),
+        };
+        let mut path_parts = pr_url
+            .path()
+            .trim_matches('/')
+            .split('/')
+            .map(|p| p.to_string())
+            .collect::<Vec<String>>();
+        path_parts.append(&mut vec!["pull".to_string(), pr_no.to_string()]);
+        pr_url.set_path(path_parts.join("/").as_str());
+        Some(Ok(pr_url))
     }
 
     pub fn task_state_config(&self) -> Option<&TaskStateConfig> {
@@ -833,6 +925,11 @@ pub enum TaskFilter {
     Deadline(TimestampFilter),
     /// Tasks whose tags match one or more of the given tags.
     Tags(Vec<String>),
+    /// Tasks whose GitHub issue number matches one or more of the given values.
+    GitHubIssue(Vec<NonZeroU32>),
+    /// Tasks whose associated GitHub pull request number matches one or more of
+    /// the given values.
+    GitHubPullRequest(Vec<NonZeroU32>),
 }
 
 impl Default for TaskFilter {
@@ -874,6 +971,14 @@ impl Filter for TaskFilter {
                     .count()
                     > 0
             }
+            Self::GitHubIssue(issues) => task
+                .github_issue()
+                .map(|issue_no| issues.iter().any(|i| issue_no == *i))
+                .unwrap_or(false),
+            Self::GitHubPullRequest(prs) => task
+                .github_pr()
+                .map(|pr_no| prs.iter().any(|p| pr_no == *p))
+                .unwrap_or(false),
         }
     }
 }
@@ -893,8 +998,15 @@ pub struct Task {
     #[serde(rename = "deadline")]
     maybe_deadline: Option<Timestamp>,
     tags: HashSet<String>,
+    #[serde(rename = "github_issue")]
+    maybe_github_issue: Option<NonZeroU32>,
+    #[serde(rename = "github_pr")]
+    maybe_github_pr: Option<NonZeroU32>,
+    // Cached data for display purposes.
     #[serde(skip)]
     maybe_stats: Option<TaskStats>,
+    #[serde(skip)]
+    maybe_project: Option<Project>,
 }
 
 impl Task {
@@ -912,7 +1024,10 @@ impl Task {
             maybe_state: None,
             maybe_deadline: None,
             tags: HashSet::new(),
+            maybe_github_issue: None,
+            maybe_github_pr: None,
             maybe_stats: None,
+            maybe_project: None,
         }
     }
 
@@ -975,8 +1090,37 @@ impl Task {
         Ok(self)
     }
 
+    pub fn with_github_issue<U>(mut self, issue_no: U) -> Result<Self, Error>
+    where
+        U: TryInto<NonZeroU32>,
+        U::Error: std::error::Error,
+    {
+        let issue_no: NonZeroU32 = issue_no
+            .try_into()
+            .map_err(|e| Error::InvalidGitHubIssueNo(e.to_string()))?;
+        self.maybe_github_issue = Some(issue_no);
+        Ok(self)
+    }
+
+    pub fn with_github_pr<U>(mut self, pr_no: U) -> Result<Self, Error>
+    where
+        U: TryInto<NonZeroU32>,
+        U::Error: std::error::Error,
+    {
+        let pr_no: NonZeroU32 = pr_no
+            .try_into()
+            .map_err(|e| Error::InvalidGitHubPullRequestNo(e.to_string()))?;
+        self.maybe_github_pr = Some(pr_no);
+        Ok(self)
+    }
+
     pub fn with_stats(mut self, stats: TaskStats) -> Self {
         self.maybe_stats = Some(stats);
+        self
+    }
+
+    pub fn with_project(mut self, project: &Project) -> Self {
+        self.maybe_project = Some(project.clone());
         self
     }
 
@@ -1008,8 +1152,20 @@ impl Task {
         self.tags.iter().map(|t| t.as_str())
     }
 
+    pub fn github_issue(&self) -> Option<NonZeroU32> {
+        self.maybe_github_issue
+    }
+
+    pub fn github_pr(&self) -> Option<NonZeroU32> {
+        self.maybe_github_pr
+    }
+
     pub fn stats(&self) -> Option<&TaskStats> {
         self.maybe_stats.as_ref()
+    }
+
+    pub fn project(&self) -> Option<&Project> {
+        self.maybe_project.as_ref()
     }
 }
 
@@ -1374,7 +1530,8 @@ fn validate_tag<S: AsRef<str>>(tag: S) -> Result<String, Error> {
 #[cfg(test)]
 mod test {
     use super::{
-        Duration, DurationFilter, Order, ProjectField, SortSpec, Timestamp, TimestampFilter,
+        Duration, DurationFilter, Order, Project, ProjectField, SortSpec, Timestamp,
+        TimestampFilter,
     };
     use lazy_static::lazy_static;
     use std::str::FromStr;
@@ -1445,5 +1602,23 @@ mod test {
             let actual = DurationFilter::from_str(s).unwrap();
             assert_eq!(actual, *expected);
         }
+    }
+
+    #[test]
+    fn project_github_issue_url() {
+        let project = Project::new("test").with_github_details("testorg", "testproject");
+        assert_eq!(
+            "https://github.com/testorg/testproject/issues/123",
+            project.github_issue_url(123).unwrap().unwrap().to_string()
+        );
+    }
+
+    #[test]
+    fn project_github_pr_url() {
+        let project = Project::new("test").with_github_details("testorg", "testproject");
+        assert_eq!(
+            "https://github.com/testorg/testproject/pull/123",
+            project.github_pr_url(123).unwrap().unwrap().to_string()
+        );
     }
 }

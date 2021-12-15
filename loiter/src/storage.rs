@@ -235,12 +235,26 @@ impl Store {
         &self,
         project_filter: &FilterSpec<ProjectFilter>,
         task_filter: &FilterSpec<TaskFilter>,
-        collect_stats: bool,
+        details: bool,
     ) -> Result<Vec<Task>, Error> {
         let projects = self.projects(project_filter)?;
         let tasks = projects
             .into_iter()
-            .map(|project| self.project_tasks(project.id(), task_filter, collect_stats))
+            .map(|project| {
+                self.project_tasks(project.id(), task_filter, details)
+                    .map(|tasks| {
+                        tasks
+                            .into_iter()
+                            .map(|task| {
+                                if details {
+                                    task.with_project(&project)
+                                } else {
+                                    task
+                                }
+                            })
+                            .collect::<Vec<Task>>()
+                    })
+            })
             .collect::<Result<Vec<Vec<Task>>, Error>>()?
             .into_iter()
             .fold(Vec::new(), |mut acc, mut v| {
@@ -255,7 +269,7 @@ impl Store {
         &self,
         project_id: &str,
         task_filter: &FilterSpec<TaskFilter>,
-        collect_stats: bool,
+        details: bool,
     ) -> Result<Vec<Task>, Error> {
         let now = Timestamp::now()?;
         let tasks_path = self.tasks_path(project_id);
@@ -272,7 +286,7 @@ impl Store {
                             Ok(task_id) => task_id,
                             Err(_) => return None,
                         };
-                        return match self.task(project_id, task_id, collect_stats) {
+                        return match self.task(project_id, task_id, details) {
                             Ok(task) => {
                                 if task_filter.matches(&task, now) {
                                     debug!("Task matches filter spec: {:?}", task);

@@ -9,6 +9,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use std::{
     ffi::OsStr,
+    num::NonZeroU32,
     path::{Path, PathBuf},
     process::{Command, ExitStatus},
     str::FromStr,
@@ -136,6 +137,16 @@ pub struct UpdateTask {
     #[structopt(name = "tags", long)]
     #[serde(rename = "tags")]
     pub maybe_tags: Option<String>,
+
+    /// Update the GitHub issue associated with this task.
+    #[structopt(name = "github-issue", long)]
+    #[serde(rename = "github_issue")]
+    pub maybe_github_issue: Option<NonZeroU32>,
+
+    /// Update the GitHub pull request associated with this task.
+    #[structopt(name = "github-pr", long)]
+    #[serde(rename = "github_pr")]
+    pub maybe_github_pr: Option<NonZeroU32>,
 }
 
 impl UpdateTask {
@@ -156,6 +167,12 @@ impl UpdateTask {
         }
         if let Some(tags) = &self.maybe_tags {
             task = task.with_tags(parse_comma_separated(Some(tags.clone())))?;
+        }
+        if let Some(github_issue) = self.maybe_github_issue {
+            task = task.with_github_issue(github_issue)?;
+        }
+        if let Some(github_pr) = self.maybe_github_pr {
+            task = task.with_github_pr(github_pr)?;
         }
         Ok(task)
     }
@@ -343,6 +360,10 @@ pub struct ListProjects {
 /// List all of the tasks for a project.
 #[derive(Debug, Clone, StructOpt, Serialize, Deserialize)]
 pub struct ListTasks {
+    /// Show more task details.
+    #[structopt(short, long)]
+    pub detailed: bool,
+
     /// Only return tasks whose project matches these project IDs
     /// (comma-separated).
     #[structopt(name = "project")]
@@ -376,6 +397,16 @@ pub struct ListTasks {
     /// (comma-separated).
     #[structopt(name = "tags", long)]
     pub maybe_tags_filter: Option<String>,
+
+    /// Only return tasks whose GitHub issues match one or more of these values
+    /// (comma-separated).
+    #[structopt(name = "github-issue", long)]
+    pub maybe_github_issue_filter: Option<String>,
+
+    /// Only returns tasks whose GitHub PRs match one or more of these values
+    /// (comma-separated).
+    #[structopt(name = "github-pr", long)]
+    pub maybe_github_pr_filter: Option<String>,
 
     /// Optionally sort the tasks by specific fields (e.g. "id" will sort tasks
     /// in ascending order by ID; "id:desc" will sort by ID in descending order;
@@ -713,6 +744,8 @@ fn build_task_filter(
     maybe_states: Option<String>,
     maybe_deadline: Option<String>,
     maybe_tags: Option<String>,
+    maybe_github_issues: Option<String>,
+    maybe_github_prs: Option<String>,
 ) -> Result<FilterSpec<TaskFilter>, Error> {
     let mut filter = FilterSpec::new(TaskFilter::All);
     if let Some(priorities) = maybe_priorities {
@@ -739,6 +772,24 @@ fn build_task_filter(
     if let Some(tags) = maybe_tags {
         filter = filter.and_then(TaskFilter::Tags(parse_comma_separated(Some(tags))));
     }
+    if let Some(github_issues) = maybe_github_issues {
+        filter = filter.and_then(TaskFilter::GitHubIssue(
+            parse_comma_separated(Some(github_issues))
+                .into_iter()
+                .map(|s| NonZeroU32::from_str(&s))
+                .collect::<Result<Vec<NonZeroU32>, std::num::ParseIntError>>()
+                .map_err(|e| Error::InvalidGitHubIssueNo(e.to_string()))?,
+        ));
+    }
+    if let Some(github_prs) = maybe_github_prs {
+        filter = filter.and_then(TaskFilter::GitHubPullRequest(
+            parse_comma_separated(Some(github_prs))
+                .into_iter()
+                .map(|s| NonZeroU32::from_str(&s))
+                .collect::<Result<Vec<NonZeroU32>, std::num::ParseIntError>>()
+                .map_err(|e| Error::InvalidGitHubPullRequestNo(e.to_string()))?,
+        ));
+    }
     Ok(filter)
 }
 
@@ -756,6 +807,8 @@ pub fn list_tasks(store: &Store, params: &ListTasks) -> Result<Vec<Task>, Error>
         Some(params.state_filter.clone()),
         params.maybe_deadline_filter.clone(),
         params.maybe_tags_filter.clone(),
+        params.maybe_github_issue_filter.clone(),
+        params.maybe_github_pr_filter.clone(),
     )?;
 
     let mut tasks = store.tasks(&project_filter, &task_filter, true)?;
@@ -806,6 +859,8 @@ pub fn list_logs(store: &Store, params: &ListLogs) -> Result<Vec<Log>, Error> {
         params.maybe_task_state_filter.clone(),
         params.maybe_task_deadline_filter.clone(),
         params.maybe_task_tags_filter.clone(),
+        None,
+        None,
     )?;
     let log_filter = build_log_filter(
         &task_filter,

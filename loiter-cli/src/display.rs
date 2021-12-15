@@ -5,7 +5,7 @@ use std::path::Path;
 use comfy_table::{presets, Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
 use crossterm::style::Stylize;
 use loiter::{
-    cmd::{ListLogs, ListProjects, LogStatus},
+    cmd::{ListLogs, ListProjects, ListTasks, LogStatus},
     Duration, Log, Project, ProjectId, Task, TaskId, TaskState, MAX_TASK_PRIORITY,
 };
 
@@ -39,6 +39,7 @@ pub fn projects(projects: Vec<Project>, params: &ListProjects) {
             "Description",
             "Deadline",
             "Tags",
+            "GitHub",
         ]));
     }
     for project in projects {
@@ -49,6 +50,7 @@ pub fn projects(projects: Vec<Project>, params: &ListProjects) {
                 Cell::new(display_optional(project.description())),
                 Cell::new(display_optional(project.deadline())).fg(COLOR_DEADLINE),
                 Cell::new(join(project.tags(), ",")).fg(COLOR_TAGS),
+                Cell::new(display_optional(project.github_url().transpose().unwrap())),
             ]);
         } else {
             table.add_row(vec![Cell::new(project.id()).fg(Color::Blue)]);
@@ -65,20 +67,24 @@ pub fn project_removed<S: AsRef<str>>(id: S) {
     println!("Removed project {}", id.as_ref().with(COLOR_PROJECT));
 }
 
-pub fn tasks(tasks: Vec<Task>, maybe_active_task: Option<(ProjectId, TaskId)>) {
+pub fn tasks(tasks: Vec<Task>, maybe_active_task: Option<(ProjectId, TaskId)>, params: &ListTasks) {
     let mut table = Table::new();
+    let mut cells = vec![
+        "Project",
+        "ID",
+        "Prio",
+        "Description",
+        "State",
+        "Deadline",
+        "Tags",
+        "Logged",
+    ];
+    if params.detailed {
+        cells.push("GitHub");
+    }
     table
         .load_preset(presets::NOTHING)
-        .set_header(header_cells(vec![
-            "Project",
-            "ID",
-            "Priority",
-            "Description",
-            "State",
-            "Deadline",
-            "Tags",
-            "Logged",
-        ]))
+        .set_header(header_cells(cells))
         .set_content_arrangement(ContentArrangement::Dynamic);
     for task in tasks {
         let is_active = if let Some((project_id, task_id)) = &maybe_active_task {
@@ -108,6 +114,20 @@ pub fn tasks(tasks: Vec<Task>, maybe_active_task: Option<(ProjectId, TaskId)>) {
             .fg(COLOR_TIME)
             .set_alignment(CellAlignment::Right),
         ];
+        if params.detailed {
+            if let Some(project) = task.project() {
+                let maybe_github_url = if let Some(github_pr) = task.github_pr() {
+                    project.github_pr_url(github_pr).transpose().unwrap()
+                } else if let Some(github_issue) = task.github_issue() {
+                    project.github_issue_url(github_issue).transpose().unwrap()
+                } else {
+                    None
+                };
+                if let Some(github_url) = maybe_github_url {
+                    cells.push(Cell::new(github_url));
+                }
+            }
+        }
         if is_active {
             cells = cells
                 .into_iter()
