@@ -90,17 +90,29 @@ pub struct AddTask {
     #[structopt(name = "tags", long)]
     #[serde(rename = "tags")]
     pub maybe_tags: Option<String>,
+
+    /// Optionally associate this task with a specific GitHub issue.
+    #[structopt(name = "github-issue", long)]
+    #[serde(rename = "github_issue")]
+    pub maybe_github_issue: Option<NonZeroU32>,
+
+    /// Optionally associate this task with a specific GitHub pull request.
+    #[structopt(name = "github-pr", long)]
+    #[serde(rename = "github_pr")]
+    pub maybe_github_pr: Option<NonZeroU32>,
 }
 
 impl TryFrom<&AddTask> for Task {
     type Error = Error;
 
     fn try_from(cmd: &AddTask) -> Result<Self, Self::Error> {
-        Task::new(&cmd.project_id, &cmd.description)
+        Ok(Task::new(&cmd.project_id, &cmd.description)
             .with_priority(cmd.priority)?
             .with_maybe_state(cmd.maybe_state.clone())
             .with_maybe_deadline(cmd.maybe_deadline)
-            .with_tags(parse_comma_separated(cmd.maybe_tags.clone()))
+            .with_tags(parse_comma_separated(cmd.maybe_tags.clone()))?
+            .with_maybe_github_issue(cmd.maybe_github_issue)
+            .with_maybe_github_pr(cmd.maybe_github_pr))
     }
 }
 

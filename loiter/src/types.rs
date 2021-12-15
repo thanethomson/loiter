@@ -1090,6 +1090,11 @@ impl Task {
         Ok(self)
     }
 
+    pub fn with_maybe_github_issue(mut self, maybe_issue_no: Option<NonZeroU32>) -> Self {
+        self.maybe_github_issue = maybe_issue_no;
+        self
+    }
+
     pub fn with_github_issue<U>(mut self, issue_no: U) -> Result<Self, Error>
     where
         U: TryInto<NonZeroU32>,
@@ -1100,6 +1105,11 @@ impl Task {
             .map_err(|e| Error::InvalidGitHubIssueNo(e.to_string()))?;
         self.maybe_github_issue = Some(issue_no);
         Ok(self)
+    }
+
+    pub fn with_maybe_github_pr(mut self, maybe_pr_no: Option<NonZeroU32>) -> Self {
+        self.maybe_github_pr = maybe_pr_no;
+        self
     }
 
     pub fn with_github_pr<U>(mut self, pr_no: U) -> Result<Self, Error>
