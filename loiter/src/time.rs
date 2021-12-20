@@ -22,6 +22,8 @@ const DATE_TIME_FORMATS_WITH_OFFSET: &[&str] = &[
     "[year]-[month]-[day] [hour]:[minute]:[second] [offset_hour sign:mandatory]:[offset_minute]",
 ];
 
+const DATE_ONLY_FORMATS: &[&str] = &["[year]-[month]-[day]"];
+
 const TIME_ONLY_FORMATS: &[&str] = &[
     "[hour]:[minute]",
     "[hour]h[minute]",
@@ -215,6 +217,13 @@ fn parse_timestamp<S: AsRef<str>>(
     }
     for fmt in DATE_TIME_FORMATS_WITH_OFFSET {
         if let Ok(dt) = OffsetDateTime::parse(&ts_orig, &format_description::parse(fmt)?) {
+            return Ok(dt);
+        }
+    }
+    for fmt in DATE_ONLY_FORMATS {
+        if let Ok(date) = Date::parse(&ts_orig, &format_description::parse(fmt)?) {
+            let dt =
+                PrimitiveDateTime::new(date, time!(00:00:00)).assume_offset(local_now.offset());
             return Ok(dt);
         }
     }
@@ -497,6 +506,7 @@ mod test {
             ("10:00".to_string(), datetime!(2021-11-04 10:00 -4),),
             ("10:23:44".to_string(), datetime!(2021-11-04 10:23:44 -4),),
             ("now".to_string(), datetime!(2021-11-04 17:00 -4)),
+            ("2021-11-01".to_string(), datetime!(2021-11-01 00:00:00 -4)),
         ];
         static ref DURATION_PARSE_TEST_CASES: Vec<(String, i64)> = vec![
             ("1m".to_string(), 60),
