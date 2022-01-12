@@ -4,7 +4,7 @@ use std::error::Error;
 use std::{convert::Infallible, path::PathBuf, str::FromStr};
 
 use log::{error, Level};
-use loiter::{cmd, Store};
+use loiter::{cmd, ProjectId, Store};
 use structopt::StructOpt;
 
 // Defaults to ~/.loiter
@@ -70,6 +70,8 @@ enum Command {
     Ls(ListCommand),
     /// Working with remote storage.
     Remote(RemoteCommand),
+    /// Shortcut to update one or more tasks as done.
+    Done(DoneCommand),
 }
 
 #[derive(Debug, StructOpt)]
@@ -109,6 +111,14 @@ enum RemoteCommand {
     Pull,
 }
 
+#[derive(Debug, StructOpt)]
+struct DoneCommand {
+    /// The ID of the project whose task(s) must be marked as done.
+    project_id: ProjectId,
+    /// The ID(s) of the tasks to mark as done (comma-separated).
+    task_ids: String,
+}
+
 fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
     let store = Store::new(&opt.path.0)?;
     match opt.command {
@@ -124,6 +134,7 @@ fn execute(opt: Opt) -> Result<(), Box<dyn Error>> {
         Command::States(params) => display::task_states(cmd::task_states(&store, &params)?),
         Command::List(list_cmd) | Command::Ls(list_cmd) => list(&store, list_cmd)?,
         Command::Remote(sub_cmd) => remote(&store, sub_cmd)?,
+        Command::Done(done_cmd) => task_done(&store, done_cmd)?,
     }
     Ok(())
 }
@@ -179,6 +190,29 @@ fn remote(store: &Store, cmd: RemoteCommand) -> Result<(), Box<dyn Error>> {
         RemoteCommand::Pull => display::remote_pulled(&cmd::remote_pull(store)?),
     }
     Ok(())
+}
+
+fn task_done(store: &Store, cmd: DoneCommand) -> Result<(), Box<dyn Error>> {
+    let config = store.config()?;
+    let project = store.project(&cmd.project_id)?;
+    let done = project
+        .task_state_config()
+        .unwrap_or_else(|| config.task_state_config())
+        .done();
+    update(
+        store,
+        UpdateCommand::Task(cmd::UpdateTask {
+            project_id: cmd.project_id,
+            task_ids: cmd.task_ids,
+            maybe_state: Some(done.to_string()),
+            maybe_description: None,
+            maybe_priority: None,
+            maybe_deadline: None,
+            maybe_tags: None,
+            maybe_github_issue: None,
+            maybe_github_pr: None,
+        }),
+    )
 }
 
 fn main() {
